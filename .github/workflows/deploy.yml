@@ -1,0 +1,58 @@
+name: Deploy to Kubernetes Control Plane
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: "ap-southeast-2"
+  AWS_ROLE_TO_ASSUME: "arn:aws:iam::626210706774:role/kube-gh-actions"
+  EC2_INSTANCE_IP: "13.211.167.107"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+
+      - name: Get GitHub Runner IP
+        id: ip
+        run: |
+          echo "ipv4=$(curl -s https://api.ipify.org)" >> $GITHUB_OUTPUT
+
+      - name: Whitelist Runner IP in EC2 Security Group
+        uses: aws-actions/aws-cli-action@v1
+        with:
+          actions_subcommand: ec2
+          args: authorize-security-group-ingress --group-id sg-05c187d7e09f32f89 --protocol tcp --port 6443 --cidr ${{ steps.ip.outputs.ipv4 }}/32
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > ~/.kube/config
+          # If your kubeconfig uses the internal EC2 IP, you might need to patch it to use the public IP/DNS here
+          sed -i "s|https://10.240.0.11:6443|https://${{ env.EC2_INSTANCE_IP }}:6443|g" ~/.kube/config
+
+      - name: Deploy Manifests
+        run: |
+          kubectl apply -f k8s/ --recursive
+
+      - name: Revoke Runner IP from Security Group
+        if: always() # Ensures this runs even if the deployment fails
+        uses: aws-actions/aws-cli-action@v1
+        with:
+          actions_subcommand: ec2
+          args: revoke-security-group-ingress --group-id sg-05c187d7e09f32f89 --protocol tcp --port 6443 --cidr ${{ steps.ip.outputs.ipv4 }}/32
