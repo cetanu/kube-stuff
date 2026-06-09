@@ -34,7 +34,7 @@ jobs:
           echo "ipv4=$(curl -s https://api.ipify.org)" >> $GITHUB_OUTPUT
 
       - name: Whitelist Runner IP in EC2 Security Group
-        uses: aws-actions/aws-cli-action@v1
+        uses: aws-actions/configure-aws-credentials@v6.2.0
         with:
           actions_subcommand: ec2
           args: authorize-security-group-ingress --group-id sg-05c187d7e09f32f89 --protocol tcp --port 6443 --cidr ${{ steps.ip.outputs.ipv4 }}/32
@@ -52,7 +52,7 @@ jobs:
 
       - name: Revoke Runner IP from Security Group
         if: always() # Ensures this runs even if the deployment fails
-        uses: aws-actions/aws-cli-action@v1
+        uses: aws-actions/configure-aws-credentials@v6.2.0
         with:
           actions_subcommand: ec2
           args: revoke-security-group-ingress --group-id sg-05c187d7e09f32f89 --protocol tcp --port 6443 --cidr ${{ steps.ip.outputs.ipv4 }}/32
