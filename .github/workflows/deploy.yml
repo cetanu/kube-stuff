@@ -13,6 +13,7 @@ env:
   AWS_REGION: "ap-southeast-2"
   AWS_ROLE_TO_ASSUME: "arn:aws:iam::626210706774:role/kube-gh-actions"
   EC2_INSTANCE_IP: "13.211.167.107"
+  AWS_SG_ID: sg-05c187d7e09f32f89
 
 jobs:
   deploy:
@@ -28,16 +29,20 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           audience: sts.amazonaws.com
 
-      - name: Get GitHub Runner IP
-        id: ip
+      - name: Discover Runner Public IP
+        id: get-ip
         run: |
-          echo "ipv4=$(curl -s https://api.ipify.org)" >> $GITHUB_OUTPUT
+          RUNNER_IP=$(curl -s https://checkip.amazonaws.com/)
+          echo "ip=${RUNNER_IP}" >> $GITHUB_OUTPUT
+          echo "Runner Public IP allocated: ${RUNNER_IP}"
 
-      - name: Whitelist Runner IP in EC2 Security Group
-        uses: aws-actions/configure-aws-credentials@v6.2.0
-        with:
-          actions_subcommand: ec2
-          args: authorize-security-group-ingress --group-id sg-05c187d7e09f32f89 --protocol tcp --port 6443 --cidr ${{ steps.ip.outputs.ipv4 }}/32
+      - name: Open Firewall Port (Ingress Whitelist)
+        run: |
+          aws ec2 authorize-security-group-ingress \
+            --group-id ${{ env.AWS_SG_ID }} \
+            --protocol tcp \
+            --port 6443 \
+            --cidr ${{ steps.get-ip.outputs.ip }}/32
 
       - name: Set up kubeconfig
         run: |
@@ -50,9 +55,11 @@ jobs:
         run: |
           kubectl apply -f k8s/ --recursive
 
-      - name: Revoke Runner IP from Security Group
-        if: always() # Ensures this runs even if the deployment fails
-        uses: aws-actions/configure-aws-credentials@v6.2.0
-        with:
-          actions_subcommand: ec2
-          args: revoke-security-group-ingress --group-id sg-05c187d7e09f32f89 --protocol tcp --port 6443 --cidr ${{ steps.ip.outputs.ipv4 }}/32
+      - name: Close Firewall Port (Revoke Access)
+        if: always()
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id ${{ env.AWS_SG_ID }} \
+            --protocol tcp \
+            --port 6443 \
+            --cidr ${{ steps.get-ip.outputs.ip }}/32
