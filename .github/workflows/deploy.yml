@@ -3,7 +3,7 @@ name: Deploy to Kubernetes Control Plane
 on:
   push:
     branches:
-      - main
+      - master
 
 permissions:
   id-token: write
