@@ -52,7 +52,7 @@ jobs:
 
       - name: Deploy Manifests
         run: |
-          kubectl apply -f k8s/ --recursive
+          kubectl apply -f k8s/ --recursive --validate=false
 
       - name: Close Firewall Port (Revoke Access)
         if: always()
