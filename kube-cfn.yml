@@ -265,12 +265,12 @@ Resources:
           TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
           INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
           ROLE=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=Role" --region ${AWS::Region} --query "Tags[0].Value" --output text)
-          echo "role: ${ROLE}" > /etc/salt/grains
+          echo "role: $ROLE" > /etc/salt/grains
 
           # -------------- Initial Bootstrap Run --------------
           salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}'}"
 
-          if [ "${ROLE}" == "controlplane" ]; then
+          if [ "$ROLE" == "controlplane" ]; then
             LOCAL=$(git -C /srv/salt-repo rev-parse HEAD)
             aws ssm put-parameter --name "/kubeadm/salt-status" --value "$LOCAL" --type "String" --overwrite --region ${AWS::Region}
           fi
@@ -311,15 +311,10 @@ Resources:
           TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
           INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
           ROLE=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=Role" --region ${AWS::Region} --query "Tags[0].Value" --output text)
-          echo "role: ${ROLE}" > /etc/salt/grains
+          echo "role: $ROLE" > /etc/salt/grains
 
           # -------------- Initial Bootstrap Run --------------
           salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}'}"
-
-          if [ "${ROLE}" == "controlplane" ]; then
-            LOCAL=$(git -C /srv/salt-repo rev-parse HEAD)
-            aws ssm put-parameter --name "/kubeadm/salt-status" --value "$LOCAL" --type "String" --overwrite --region ${AWS::Region}
-          fi
 
   # --- WORKER NODE 1 ---
   Worker1:
@@ -357,15 +352,10 @@ Resources:
           TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
           INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
           ROLE=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=Role" --region ${AWS::Region} --query "Tags[0].Value" --output text)
-          echo "role: ${ROLE}" > /etc/salt/grains
+          echo "role: $ROLE" > /etc/salt/grains
 
           # -------------- Initial Bootstrap Run --------------
           salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}'}"
-
-          if [ "${ROLE}" == "controlplane" ]; then
-            LOCAL=$(git -C /srv/salt-repo rev-parse HEAD)
-            aws ssm put-parameter --name "/kubeadm/salt-status" --value "$LOCAL" --type "String" --overwrite --region ${AWS::Region}
-          fi
 
 Outputs:
   GitHubActionsRunnerRoleARN:
