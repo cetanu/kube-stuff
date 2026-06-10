@@ -75,9 +75,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - 'ssm:GetParameter'
-                Resource:
-                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/kubeadm/kubeconfig'
-                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/kubeadm/control-plane-ip'
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/kubeadm/kubeconfig'
 
   # --- NETWORKING ---
   VPC:
@@ -143,14 +141,6 @@ Resources:
     Properties:
       InstanceId: !Ref ControlPlane0
       AllocationId: !GetAtt ControlPlaneEIP.AllocationId
-
-  ControlPlaneEIPParameter:
-    Type: 'AWS::SSM::Parameter'
-    Properties:
-      Name: '/kubeadm/control-plane-ip'
-      Type: 'String'
-      Value: !Ref ControlPlaneEIP
-      Description: 'Elastic IP address of the Control Plane'
 
   ControlPlane0:
     Type: 'AWS::EC2::Instance'
