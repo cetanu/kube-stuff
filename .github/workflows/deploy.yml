@@ -12,7 +12,7 @@ permissions:
 env:
   AWS_REGION: "ap-southeast-2"
   AWS_ROLE_TO_ASSUME: "arn:aws:iam::626210706774:role/kube-gh-actions"
-  EC2_INSTANCE_IP: "13.211.167.107"
+  EC2_INSTANCE_IP: "13.210.193.199"
   AWS_SG_ID: sg-05c187d7e09f32f89
 
 jobs:
@@ -48,7 +48,6 @@ jobs:
         run: |
           mkdir -p ~/.kube
           echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > ~/.kube/config
-          # If your kubeconfig uses the internal EC2 IP, you might need to patch it to use the public IP/DNS here
           sed -i "s|https://10.240.0.11:6443|https://${{ env.EC2_INSTANCE_IP }}:6443|g" ~/.kube/config
 
       - name: Deploy Manifests
