@@ -6,11 +6,6 @@ Parameters:
     Description: 'Name of an existing EC2 KeyPair for SSH access to the nodes'
     Type: 'AWS::EC2::KeyPair::KeyName'
 
-  YourIP:
-    Description: 'The CIDR block allowed to access SSH and the K8s API (e.g., 203.0.113.50/32)'
-    Type: String
-    Default: '0.0.0.0/0'
-
   GitHubOrg:
     Description: 'GitHub organization or owner (e.g., my-org)'
     Type: String
@@ -382,14 +377,6 @@ Resources:
           eval "$JOIN_CMD"
 
 Outputs:
-  ControlPlanePublicIP:
-    Description: 'Public IP of the Master Control Plane Node'
-    Value: !GetAtt ControlPlane0.PublicIp
-
-  ControlPlaneElasticIP:
-    Description: 'Elastic IP of the Control Plane Node'
-    Value: !Ref ControlPlaneEIP
-
   GitHubActionsRunnerRoleARN:
     Description: 'ARN of the IAM Role for GitHub Actions runner to assume'
     Value: !GetAtt GitHubActionsRunnerRole.Arn
