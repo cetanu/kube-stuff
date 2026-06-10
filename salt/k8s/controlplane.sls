@@ -6,11 +6,41 @@ helm_install:
     - name: curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
     - creates: /usr/local/bin/helm
 
+kubeadm_config:
+  file.managed:
+    - name: /etc/kubernetes/kubeadm-config.yaml
+    - template: jinja
+    - contents: |
+        apiVersion: kubeadm.k8s.io/v1beta3
+        kind: InitConfiguration
+        localAPIEndpoint:
+          advertiseAddress: 10.240.0.11
+        nodeRegistration:
+          kubeletExtraArgs:
+            cloud-provider: external
+        ---
+        apiVersion: kubeadm.k8s.io/v1beta3
+        kind: ClusterConfiguration
+        kubernetesVersion: "1.30.0"
+        clusterName: "kubernetes"
+        networking:
+          podSubnet: "10.244.0.0/16"
+        apiServer:
+          certSANs:
+            - "10.240.0.11"
+            - "{{ salt['pillar.get']('eip') }}"
+          extraArgs:
+            cloud-provider: external
+        controllerManager:
+          extraArgs:
+            cloud-provider: external
+
 kubeadm_init:
   cmd.run:
-    - name: kubeadm init --apiserver-advertise-address=10.240.0.11 --pod-network-cidr=10.244.0.0/16 --apiserver-cert-extra-sans=10.240.0.11,{{ salt['pillar.get']('eip') }}
+    - name: kubeadm init --config /etc/kubernetes/kubeadm-config.yaml
     - creates: /etc/kubernetes/admin.conf
     - require:
+      - file: kubeadm_config
       - pkg: k8s_packages
 
 kubeconfig_setup:
@@ -28,6 +58,29 @@ flannel_apply:
     - name: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
     - require:
       - cmd: kubeadm_init
+
+aws-cloud-controller-manager-repo:
+  helm.repo_managed:
+    - name: aws-cloud-controller-manager
+    - url: https://kubernetes.github.io/cloud-provider-aws
+
+aws-ccm:
+  helm.release_present:
+    - name: aws-cloud-controller-manager
+    - chart: aws-cloud-controller-manager/aws-cloud-controller-manager
+    - namespace: kube-system
+    - kubeconfig: /etc/kubernetes/admin.conf
+    - set:
+      - name: hostNetworking
+        value: "true"
+      - name: args[0]
+        value: "--v=2"
+      - name: args[1]
+        value: "--cloud-provider=aws"
+    - require:
+      - cmd: helm_install
+      - cmd: flannel_apply
+      - helm: aws-cloud-controller-manager-repo
 
 aws-ebs-csi-driver-repo:
   helm.repo_managed:

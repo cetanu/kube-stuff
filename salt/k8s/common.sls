@@ -86,6 +86,14 @@ k8s_packages:
     - require:
       - file: k8s_repo
 
+kubelet_config:
+  file.managed:
+    - name: /etc/default/kubelet
+    - contents: |
+        KUBELET_EXTRA_ARGS=--cloud-provider=external
+    - require:
+      - pkg: k8s_packages
+
 k8s_hold:
   cmd.run:
     - name: apt-mark hold kubelet kubeadm kubectl
