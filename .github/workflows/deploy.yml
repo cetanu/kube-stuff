@@ -10,8 +10,8 @@ permissions:
   contents: read
 
 env:
-  AWS_REGION: "ap-southeast-2"
-  AWS_ROLE_TO_ASSUME: "arn:aws:iam::626210706774:role/kube-gh-actions" # Update with your stack's GitHubActionsRunnerRoleARN output
+  AWS_REGION: ap-southeast-2
+  AWS_ROLE_TO_ASSUME: arn:aws:iam::626210706774:role/kube-github-actions-runner
   AWS_SG_ID: sg-05c187d7e09f32f89
 
 jobs:
