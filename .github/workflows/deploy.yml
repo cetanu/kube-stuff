@@ -27,6 +27,17 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           audience: sts.amazonaws.com
 
+      - name: Deploy CloudFormation Stack
+        run: |
+          aws cloudformation deploy \
+            --template-file kube-cfn.yml \
+            --stack-name k8s-modern-cluster \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides \
+              GitHubOrg=${{ github.repository_owner }} \
+              GitHubRepo=${{ github.event.repository.name }} \
+            --no-fail-on-empty-changeset
+
       - name: Fetch Security Group ID from SSM
         run: |
           SG_ID=$(aws ssm get-parameter --name "/kubeadm/security-group-id" --query "Parameter.Value" --output text)
