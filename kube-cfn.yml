@@ -270,6 +270,11 @@ Resources:
           # -------------- Initial Bootstrap Run --------------
           salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}'}"
 
+          if [ "${ROLE}" == "controlplane" ]; then
+            LOCAL=$(git -C /srv/salt-repo rev-parse HEAD)
+            aws ssm put-parameter --name "/kubeadm/salt-status" --value "$LOCAL" --type "String" --overwrite --region ${AWS::Region}
+          fi
+
   # --- WORKER NODE 0 ---
   Worker0:
     Type: 'AWS::EC2::Instance'
@@ -311,6 +316,11 @@ Resources:
           # -------------- Initial Bootstrap Run --------------
           salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}'}"
 
+          if [ "${ROLE}" == "controlplane" ]; then
+            LOCAL=$(git -C /srv/salt-repo rev-parse HEAD)
+            aws ssm put-parameter --name "/kubeadm/salt-status" --value "$LOCAL" --type "String" --overwrite --region ${AWS::Region}
+          fi
+
   # --- WORKER NODE 1 ---
   Worker1:
     Type: 'AWS::EC2::Instance'
@@ -351,6 +361,11 @@ Resources:
 
           # -------------- Initial Bootstrap Run --------------
           salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}'}"
+
+          if [ "${ROLE}" == "controlplane" ]; then
+            LOCAL=$(git -C /srv/salt-repo rev-parse HEAD)
+            aws ssm put-parameter --name "/kubeadm/salt-status" --value "$LOCAL" --type "String" --overwrite --region ${AWS::Region}
+          fi
 
 Outputs:
   GitHubActionsRunnerRoleARN:

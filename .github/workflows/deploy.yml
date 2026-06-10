@@ -59,6 +59,20 @@ jobs:
             --port 6443 \
             --cidr ${{ steps.get-ip.outputs.ip }}/32
 
+      - name: Wait for Kubernetes Control Plane to Initialize
+        run: |
+          echo "Waiting for kubeconfig to be published to SSM by the control plane..."
+          until aws ssm get-parameter --name "/kubeadm/kubeconfig" > /dev/null 2>&1; do
+            sleep 15
+          done
+
+      - name: Wait for Control Plane to Apply Latest States
+        run: |
+          echo "Waiting for control plane to apply commit ${{ github.sha }}..."
+          until [ "$(aws ssm get-parameter --name "/kubeadm/salt-status" --query "Parameter.Value" --output text 2>/dev/null)" == "${{ github.sha }}" ]; do
+            sleep 15
+          done
+
       - name: Set up kubeconfig
         run: |
           mkdir -p ~/.kube

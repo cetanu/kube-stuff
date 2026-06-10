@@ -118,6 +118,11 @@ run_salt_script:
         popd
         salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '{{ salt['pillar.get']('aws_region') }}', eip: '{{ salt['pillar.get']('eip', '') }}'}"
         touch /var/run/salt-bootstrapped
+        
+        ROLE=$(cat /etc/salt/grains | grep role | awk '{print $2}')
+        if [ "$ROLE" == "controlplane" ]; then
+          aws ssm put-parameter --name "/kubeadm/salt-status" --value "$REMOTE" --type "String" --overwrite --region {{ salt['pillar.get']('aws_region') }}
+        fi
 
 run_salt_cron:
   cron.present:
