@@ -12,7 +12,6 @@ permissions:
 env:
   AWS_REGION: ap-southeast-2
   AWS_ROLE_TO_ASSUME: arn:aws:iam::626210706774:role/kube-github-actions-runner
-  AWS_SG_ID: sg-05c187d7e09f32f89
 
 jobs:
   deploy:
@@ -27,6 +26,11 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
           audience: sts.amazonaws.com
+
+      - name: Fetch Security Group ID from SSM
+        run: |
+          SG_ID=$(aws ssm get-parameter --name "/kubeadm/security-group-id" --query "Parameter.Value" --output text)
+          echo "AWS_SG_ID=${SG_ID}" >> $GITHUB_ENV
 
       - name: Discover Runner Public IP
         id: get-ip
