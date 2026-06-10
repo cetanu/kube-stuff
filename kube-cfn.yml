@@ -246,7 +246,7 @@ Resources:
         {Key: 'kubernetes.io/cluster/kubernetes', Value: 'owned'},
         {Key: Role, Value: 'controlplane'},
       ]
-      UserData: &NodeUserData
+      UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
           # ------------- Network check --------------
@@ -287,7 +287,29 @@ Resources:
         {Key: 'kubernetes.io/cluster/kubernetes', Value: 'owned'},
         {Key: Role, Value: 'worker'}
       ]
-      UserData: *NodeUserData
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # ------------- Network check --------------
+          until curl -s --connect-timeout 2 aws.amazon.com > /dev/null; do
+            sleep 2
+          done
+
+          # ------------- Bootstrap SaltStack --------------
+          apt-get update && apt-get install -y curl git awscli jq
+          curl -L https://bootstrap.saltproject.io -o install_salt.sh
+          sh install_salt.sh
+
+          git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
+
+          # -------------- Set up Salt grains --------------
+          TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
+          INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
+          ROLE=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=Role" --region ${AWS::Region} --query "Tags[0].Value" --output text)
+          echo "role: ${ROLE}" > /etc/salt/grains
+
+          # -------------- Initial Bootstrap Run --------------
+          salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}'}"
 
   # --- WORKER NODE 1 ---
   Worker1:
@@ -306,7 +328,29 @@ Resources:
         {Key: 'kubernetes.io/cluster/kubernetes', Value: 'owned'},
         {Key: Role, Value: 'worker'}
       ]
-      UserData: *NodeUserData
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # ------------- Network check --------------
+          until curl -s --connect-timeout 2 aws.amazon.com > /dev/null; do
+            sleep 2
+          done
+
+          # ------------- Bootstrap SaltStack --------------
+          apt-get update && apt-get install -y curl git awscli jq
+          curl -L https://bootstrap.saltproject.io -o install_salt.sh
+          sh install_salt.sh
+
+          git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
+
+          # -------------- Set up Salt grains --------------
+          TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
+          INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
+          ROLE=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=Role" --region ${AWS::Region} --query "Tags[0].Value" --output text)
+          echo "role: ${ROLE}" > /etc/salt/grains
+
+          # -------------- Initial Bootstrap Run --------------
+          salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}'}"
 
 Outputs:
   GitHubActionsRunnerRoleARN:
