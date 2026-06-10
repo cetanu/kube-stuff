@@ -198,47 +198,33 @@ Resources:
       SecurityGroupIds: [!Ref ClusterSG]
       SubnetId: !Ref Subnet
       PrivateIpAddress: '10.240.0.11'
-      Tags: [{Key: Name, Value: 'control-plane-0'}]
+      Tags: [
+        {Key: Name, Value: 'control-plane-0'},
+        {Key: Role, Value: 'controlplane'},
+      ]
       UserData: &NodeUserData
         Fn::Base64: !Sub |
           #!/bin/bash
-          until curl -s --connect-timeout 2 google.com > /dev/null; do
+          # ------------- Network check --------------
+          until curl -s --connect-timeout 2 aws.amazon.com > /dev/null; do
             sleep 2
           done
 
-          # Bootstrap using SaltStack
+          # ------------- Bootstrap SaltStack --------------
           apt-get update && apt-get install -y curl git awscli jq
           curl -L https://bootstrap.saltproject.io -o install_salt.sh
           sh install_salt.sh
 
           git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
 
-          cat <<EOF > /usr/local/bin/run-salt.sh
-          #!/bin/bash
-          cd /srv/salt-repo
-          git fetch origin
-          git reset --hard origin/\$(git rev-parse --abbrev-ref HEAD)
+          # -------------- Set up Salt grains --------------
+          TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
+          INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
+          ROLE=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=Role" --region ${AWS::Region} --query "Tags[0].Value" --output text)
+          echo "role: ${ROLE}" > /etc/salt/grains
 
-          # Determine node role based on AWS Tags
-          TOKEN=\$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
-          INSTANCE_ID=\$(curl -H "X-aws-ec2-metadata-token: \$TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
-          NODE_NAME=\$(aws ec2 describe-tags --filters "Name=resource-id,Values=\$INSTANCE_ID" "Name=key,Values=Name" --region ${AWS::Region} --query "Tags[0].Value" --output text)
-
-          if [[ "\$NODE_NAME" == *"control-plane"* ]]; then
-            echo "role: controlplane" > /etc/salt/grains
-          else
-            echo "role: worker" > /etc/salt/grains
-          fi
-
+          # -------------- Initial Bootstrap Run --------------
           salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}'}"
-          EOF
-          chmod +x /usr/local/bin/run-salt.sh
-
-          # Run Salt for the first time
-          /usr/local/bin/run-salt.sh
-
-          # Add to cron to run every 15 minutes
-          echo "*/15 * * * * root /usr/local/bin/run-salt.sh >> /var/log/salt-cron.log 2>&1" | tee /etc/cron.d/salt-apply
 
   # --- WORKER NODE 0 ---
   Worker0:
@@ -252,7 +238,10 @@ Resources:
       SecurityGroupIds: [!Ref ClusterSG]
       SubnetId: !Ref Subnet
       PrivateIpAddress: '10.240.0.20'
-      Tags: [{Key: Name, Value: 'worker-0'}]
+      Tags: [
+        {Key: Name, Value: 'worker-0'},
+        {Key: Role, Value: 'worker'}
+      ]
       UserData: *NodeUserData
 
   # --- WORKER NODE 1 ---
@@ -267,7 +256,10 @@ Resources:
       SecurityGroupIds: [!Ref ClusterSG]
       SubnetId: !Ref Subnet
       PrivateIpAddress: '10.240.0.21'
-      Tags: [{Key: Name, Value: 'worker-1'}]
+      Tags: [
+        {Key: Name, Value: 'worker-1'},
+        {Key: Role, Value: 'worker'}
+      ]
       UserData: *NodeUserData
 
 Outputs:
