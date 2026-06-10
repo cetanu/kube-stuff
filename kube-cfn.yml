@@ -1,0 +1,262 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Modern Kubernetes Cluster Provisioning using kubeadm, containerd, and Flannel.'
+
+Parameters:
+  KeyPairName:
+    Description: 'Name of an existing EC2 KeyPair for SSH access to the nodes'
+    Type: 'AWS::EC2::KeyPair::KeyName'
+
+  YourIP:
+    Description: 'The CIDR block allowed to access SSH and the K8s API (e.g., 203.0.113.50/32)'
+    Type: String
+    Default: '0.0.0.0/0'
+
+Resources:
+  # --- IAM CONFIGURATION FOR KUBEADM JOIN KEY EXCHANGE ---
+  InstanceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ec2.amazonaws.com]
+            Action: ['sts:AssumeRole']
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore'
+      Policies:
+        - PolicyName: 'KubeadmJoinTokenExchange'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ssm:PutParameter'
+                  - 'ssm:GetParameter'
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/kubeadm/*'
+
+  InstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Roles: [!Ref InstanceRole]
+
+  # --- NETWORKING ---
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: '10.240.0.0/16'
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{Key: Name, Value: 'k8s-modern-vpc'}]
+
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+  VPCGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties: {VpcId: !Ref VPC, InternetGatewayId: !Ref InternetGateway}
+
+  Subnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: '10.240.0.0/24'
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags: [{Key: Name, Value: 'k8s-modern-subnet'}]
+
+  RouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties: {VpcId: !Ref VPC}
+  DefaultRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: VPCGatewayAttachment
+    Properties: {RouteTableId: !Ref RouteTable, DestinationCidrBlock: '0.0.0.0/0', GatewayId: !Ref InternetGateway}
+  SubnetRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties: {SubnetId: !Ref Subnet, RouteTableId: !Ref RouteTable}
+
+  # --- SECURITY GROUPS ---
+  ClusterSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Allow all internal traffic, plus external SSH and Kubernetes API'
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        # Full internal cluster communication (Nodes talking to each other)
+        - {IpProtocol: '-1', CidrIp: '10.240.0.0/24'}
+        # Flannel overlay pod network communication space
+        - {IpProtocol: '-1', CidrIp: '10.244.0.0/16'}
+        # External management access
+        - {IpProtocol: tcp, FromPort: 22, ToPort: 22, CidrIp: !Ref YourIP}
+        - {IpProtocol: tcp, FromPort: 6443, ToPort: 6443, CidrIp: !Ref YourIP}
+      SecurityGroupEgress:
+        - {IpProtocol: '-1', CidrIp: '0.0.0.0/0'}
+
+  # --- CONTROL PLANE (MASTER) ---
+  ControlPlane0:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: 'ami-0a59248a6294cece2' # Ubuntu 22.04 LTS (us-east-1)
+      InstanceType: 't3.small' # Minimum spec for control plane
+      KeyName: !Ref KeyPairName
+      IamInstanceProfile: !Ref InstanceProfile
+      SecurityGroupIds: [!Ref ClusterSG]
+      SubnetId: !Ref Subnet
+      PrivateIpAddress: '10.240.0.11'
+      Tags: [{Key: Name, Value: 'control-plane-0'}]
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+
+          # 1. Prerequisites: System networking modules for containerd/kubernetes
+          cat <<EOF | tee /etc/modules-load.d/k8s.conf
+          overlay
+          br_netfilter
+          EOF
+          modprobe overlay
+          modprobe br_netfilter
+
+          cat <<EOF | tee /etc/sysctl.d/99-kubernetes-cri.conf
+          net.bridge.bridge-nf-call-iptables  = 1
+          net.ipv4.ip_forward                 = 1
+          net.bridge.bridge-nf-call-ip6tables = 1
+          EOF
+          sysctl --system
+
+          # 2. Install containerd runtime
+          apt-get update && apt-get install -y containerd
+          mkdir -p /etc/containerd
+          containerd config default | tee /etc/containerd/config.toml
+          sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
+          systemctl restart containerd
+
+          # 3. Install kubeadm, kubelet and kubectl
+          apt-get update && apt-get install -y apt-transport-https ca-certificates curl gpg
+          curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+          echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list
+          apt-get update && apt-get install -y kubelet kubeadm kubectl awscli
+          apt-mark hold kubelet kubeadm kubectl
+
+          helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
+          helm repo update
+          helm install aws-ebs-csi-driver aws-ebs-csi-driver/aws-ebs-csi-driver --namespace kube-system
+
+          # 4. Initialize control plane using kubeadm
+          # --pod-network-cidr=10.244.0.0/16 is explicitly required for Flannel CNI
+          kubeadm init --apiserver-advertise-address=10.240.0.11 --pod-network-cidr=10.244.0.0/16
+
+          # 5. Configure administrative kubeconfig access
+          mkdir -p /home/ubuntu/.kube
+          cp -i /etc/kubernetes/admin.conf /home/ubuntu/.kube/config
+          chown -R ubuntu:ubuntu /home/ubuntu/.kube
+
+          # 6. Apply Flannel CNI so nodes can become 'Ready'
+          export KUBECONFIG=/etc/kubernetes/admin.conf
+          kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+
+          # 7. Generate and store the worker cluster-join command dynamically into SSM
+          JOIN_CMD=$(kubeadm token create --print-join-command)
+          aws ssm put-parameter --name "/kubeadm/join-command" --value "$JOIN_CMD" --type "String" --overwrite --region ${AWS::Region}
+
+  # --- WORKER NODE 0 ---
+  Worker0:
+    Type: 'AWS::EC2::Instance'
+    DependsOn: ControlPlane0
+    Properties:
+      ImageId: 'ami-0a59248a6294cece2'
+      InstanceType: 't3.small'
+      KeyName: !Ref KeyPairName
+      IamInstanceProfile: !Ref InstanceProfile
+      SecurityGroupIds: [!Ref ClusterSG]
+      SubnetId: !Ref Subnet
+      PrivateIpAddress: '10.240.0.20'
+      Tags: [{Key: Name, Value: 'worker-0'}]
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # Same runtime setup as control-plane
+          cat <<EOF | tee /etc/modules-load.d/k8s.conf
+          overlay
+          br_netfilter
+          EOF
+          modprobe overlay
+          modprobe br_netfilter
+
+          cat <<EOF | tee /etc/sysctl.d/99-kubernetes-cri.conf
+          net.bridge.bridge-nf-call-iptables  = 1
+          net.ipv4.ip_forward                 = 1
+          net.bridge.bridge-nf-call-ip6tables = 1
+          EOF
+          sysctl --system
+
+          apt-get update && apt-get install -y containerd
+          mkdir -p /etc/containerd
+          containerd config default | tee /etc/containerd/config.toml
+          sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
+          systemctl restart containerd
+
+          apt-get update && apt-get install -y apt-transport-https ca-certificates curl gpg
+          curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+          echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list
+          apt-get update && apt-get install -y kubelet kubeadm awscli
+          apt-mark hold kubelet kubeadm
+
+          # Pull the active cluster join token out of SSM and run it
+          until JOIN_CMD=$(aws ssm get-parameter --name "/kubeadm/join-command" --query "Parameter.Value" --output text --region ${AWS::Region} 2>/dev/null); do
+            sleep 10
+          done
+          eval "$JOIN_CMD"
+
+  # --- WORKER NODE 1 ---
+  Worker1:
+    Type: 'AWS::EC2::Instance'
+    DependsOn: ControlPlane0
+    Properties:
+      ImageId: 'ami-0a59248a6294cece2'
+      InstanceType: 't3.small'
+      KeyName: !Ref KeyPairName
+      IamInstanceProfile: !Ref InstanceProfile
+      SecurityGroupIds: [!Ref ClusterSG]
+      SubnetId: !Ref Subnet
+      PrivateIpAddress: '10.240.0.21'
+      Tags: [{Key: Name, Value: 'worker-1'}]
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          cat <<EOF | tee /etc/modules-load.d/k8s.conf
+          overlay
+          br_netfilter
+          EOF
+          modprobe overlay
+          modprobe br_netfilter
+
+          cat <<EOF | tee /etc/sysctl.d/99-kubernetes-cri.conf
+          net.bridge.bridge-nf-call-iptables  = 1
+          net.ipv4.ip_forward                 = 1
+          net.bridge.bridge-nf-call-ip6tables = 1
+          EOF
+          sysctl --system
+
+          apt-get update && apt-get install -y containerd
+          mkdir -p /etc/containerd
+          containerd config default | tee /etc/containerd/config.toml
+          sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
+          systemctl restart containerd
+
+          apt-get update && apt-get install -y apt-transport-https ca-certificates curl gpg
+          curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+          echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list
+          apt-get update && apt-get install -y kubelet kubeadm awscli
+          apt-mark hold kubelet kubeadm
+
+          until JOIN_CMD=$(aws ssm get-parameter --name "/kubeadm/join-command" --query "Parameter.Value" --output text --region ${AWS::Region} 2>/dev/null); do
+            sleep 10
+          done
+          eval "$JOIN_CMD"
+
+Outputs:
+  ControlPlanePublicIP:
+    Description: 'Public IP of the Master Control Plane Node'
+    Value: !GetAtt ControlPlane0.PublicIp
