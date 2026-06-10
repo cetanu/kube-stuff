@@ -51,6 +51,15 @@ Resources:
     Properties:
       Roles: [!Ref InstanceRole]
 
+  GithubOidcProvider:
+    Type: 'AWS::IAM::OIDCProvider'
+    Properties:
+      Url: 'https://token.actions.githubusercontent.com'
+      ClientIdList:
+        - 'sts.amazonaws.com'
+      ThumbprintList:
+        - '6938fd4d98bab03faadb97b34396831e3780aea1'
+
   GitHubActionsRunnerRole:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -60,7 +69,7 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Federated: !Sub 'arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com'
+              Federated: !Ref GithubOidcProvider
             Action: 'sts:AssumeRoleWithWebIdentity'
             Condition:
               StringEquals:
