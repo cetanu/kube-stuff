@@ -84,7 +84,9 @@ Resources:
               - Effect: Allow
                 Action:
                   - 'ssm:GetParameter'
-                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/kubeadm/kubeconfig'
+                Resource:
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/kubeadm/kubeconfig'
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/kubeadm/security-group-id'
         - PolicyName: 'EC2SecurityGroupAccess'
           PolicyDocument:
             Version: '2012-10-17'
@@ -149,6 +151,14 @@ Resources:
         - {IpProtocol: tcp, FromPort: 22, ToPort: 22, CidrIp: !Ref YourIP}
       SecurityGroupEgress:
         - {IpProtocol: '-1', CidrIp: '0.0.0.0/0'}
+
+  ClusterSGParameter:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Name: '/kubeadm/security-group-id'
+      Type: 'String'
+      Value: !Ref ClusterSG
+      Description: 'Security Group ID of the Kubernetes Cluster'
 
   # --- CONTROL PLANE (MASTER) ---
   ControlPlaneEIP:
