@@ -1,0 +1,49 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: eg
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: valheim-gateway
+  namespace: default
+spec:
+  gatewayClassName: eg
+  listeners:
+    - name: valheim-udp-2456
+      protocol: UDP
+      port: 2456
+    - name: valheim-udp-2457
+      protocol: UDP
+      port: 2457
+---
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: UDPRoute
+metadata:
+  name: valheim-udp-route-2456
+  namespace: default
+spec:
+  parentRefs:
+    - name: valheim-gateway
+      sectionName: valheim-udp-2456
+  rules:
+    - backendRefs:
+        - name: valheim-server
+          port: 2456
+---
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: UDPRoute
+metadata:
+  name: valheim-udp-route-2457
+  namespace: default
+spec:
+  parentRefs:
+    - name: valheim-gateway
+      sectionName: valheim-udp-2457
+  rules:
+    - backendRefs:
+        - name: valheim-server
+          port: 2457

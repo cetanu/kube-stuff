@@ -29,17 +29,46 @@ flannel_apply:
     - require:
       - cmd: kubeadm_init
 
+aws-ebs-csi-driver-repo:
+  helm.repo_managed:
+    - name: aws-ebs-csi-driver
+    - url: https://kubernetes-sigs.github.io/aws-ebs-csi-driver
+
 ebs_csi_driver:
-  cmd.run:
-    - name: |
-        export KUBECONFIG=/etc/kubernetes/admin.conf
-        helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
-        helm repo update
-        helm install aws-ebs-csi-driver aws-ebs-csi-driver/aws-ebs-csi-driver --namespace kube-system
+  helm.release_present:
+    - name: aws-ebs-csi-driver
+    - chart: aws-ebs-csi-driver/aws-ebs-csi-driver
+    - namespace: kube-system
+    - kubeconfig: /etc/kubernetes/admin.conf
     - require:
       - cmd: helm_install
       - cmd: flannel_apply
-    - unless: helm ls -n kube-system | grep aws-ebs-csi-driver
+      - helm: aws-ebs-csi-driver-repo
+
+gateway_api_crds:
+  cmd.run:
+    - name: |
+        export KUBECONFIG=/etc/kubernetes/admin.conf
+        kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.1.0/experimental-install.yaml
+    - require:
+      - cmd: kubeadm_init
+
+envoy_gateway_ns:
+  cmd.run:
+    - name: kubectl create ns envoy-gateway-system --kubeconfig=/etc/kubernetes/admin.conf
+    - unless: kubectl get ns envoy-gateway-system --kubeconfig=/etc/kubernetes/admin.conf
+
+envoy_gateway:
+  helm.release_present:
+    - name: eg
+    - chart: oci://docker.io/envoyproxy/gateway-helm
+    - version: v1.1.1
+    - namespace: envoy-gateway-system
+    - kubeconfig: /etc/kubernetes/admin.conf
+    - require:
+      - cmd: helm_install
+      - cmd: gateway_api_crds
+      - cmd: envoy_gateway_ns
 
 ssm_kubeconfig:
   cmd.run:
