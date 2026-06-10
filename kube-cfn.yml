@@ -11,6 +11,16 @@ Parameters:
     Type: String
     Default: '0.0.0.0/0'
 
+  GitHubOrg:
+    Description: 'GitHub organization or owner (e.g., my-org)'
+    Type: String
+    Default: 'my-org'
+
+  GitHubRepo:
+    Description: 'GitHub repository allowed to assume the runner role (e.g., my-repo or * for all repos in org)'
+    Type: String
+    Default: 'my-repo'
+
 Resources:
   # --- IAM CONFIGURATION FOR KUBEADM JOIN KEY EXCHANGE ---
   InstanceRole:
@@ -40,6 +50,34 @@ Resources:
     Type: 'AWS::IAM::InstanceProfile'
     Properties:
       Roles: [!Ref InstanceRole]
+
+  GitHubActionsRunnerRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-github-actions-runner'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub 'arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com'
+            Action: 'sts:AssumeRoleWithWebIdentity'
+            Condition:
+              StringEquals:
+                'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com'
+              StringLike:
+                'token.actions.githubusercontent.com:sub': !Sub 'repo:${GitHubOrg}/${GitHubRepo}:*'
+      Policies:
+        - PolicyName: 'SSMParameterAccess'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ssm:GetParameter'
+                Resource:
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/kubeadm/kubeconfig'
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/kubeadm/control-plane-ip'
 
   # --- NETWORKING ---
   VPC:
@@ -94,6 +132,26 @@ Resources:
         - {IpProtocol: '-1', CidrIp: '0.0.0.0/0'}
 
   # --- CONTROL PLANE (MASTER) ---
+  ControlPlaneEIP:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: vpc
+      Tags: [{Key: Name, Value: 'control-plane-eip'}]
+
+  ControlPlaneEIPAssociation:
+    Type: 'AWS::EC2::EIPAssociation'
+    Properties:
+      InstanceId: !Ref ControlPlane0
+      AllocationId: !GetAtt ControlPlaneEIP.AllocationId
+
+  ControlPlaneEIPParameter:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Name: '/kubeadm/control-plane-ip'
+      Type: 'String'
+      Value: !Ref ControlPlaneEIP
+      Description: 'Elastic IP address of the Control Plane'
+
   ControlPlane0:
     Type: 'AWS::EC2::Instance'
     Properties:
@@ -109,6 +167,11 @@ Resources:
         Fn::Base64: !Sub |
           #!/bin/bash
           set -e
+
+          # Wait for Elastic IP association to settle and internet connectivity to be active
+          until curl -s --connect-timeout 2 google.com > /dev/null; do
+            sleep 2
+          done
 
           # 1. Prerequisites: System networking modules for containerd/kubernetes
           cat <<EOF | tee /etc/modules-load.d/k8s.conf
@@ -132,33 +195,83 @@ Resources:
           sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
           systemctl restart containerd
 
-          # 3. Install kubeadm, kubelet and kubectl
+          # 3. Install kubeadm, kubelet, kubectl, awscli and helm
           apt-get update && apt-get install -y apt-transport-https ca-certificates curl gpg
           curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
           echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list
           apt-get update && apt-get install -y kubelet kubeadm kubectl awscli
           apt-mark hold kubelet kubeadm kubectl
 
-          helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
-          helm repo update
-          helm install aws-ebs-csi-driver aws-ebs-csi-driver/aws-ebs-csi-driver --namespace kube-system
+          # Install Helm
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
           # 4. Initialize control plane using kubeadm
           # --pod-network-cidr=10.244.0.0/16 is explicitly required for Flannel CNI
-          kubeadm init --apiserver-advertise-address=10.240.0.11 --pod-network-cidr=10.244.0.0/16
+          # Include Elastic IP in certificate SANs so kubectl can connect externally
+          kubeadm init --apiserver-advertise-address=10.240.0.11 --pod-network-cidr=10.244.0.0/16 --apiserver-cert-extra-sans=10.240.0.11,${ControlPlaneEIP}
 
           # 5. Configure administrative kubeconfig access
           mkdir -p /home/ubuntu/.kube
           cp -i /etc/kubernetes/admin.conf /home/ubuntu/.kube/config
           chown -R ubuntu:ubuntu /home/ubuntu/.kube
 
-          # 6. Apply Flannel CNI so nodes can become 'Ready'
+          # Set KUBECONFIG for the current root session
           export KUBECONFIG=/etc/kubernetes/admin.conf
+
+          # 6. Apply Flannel CNI so nodes can become 'Ready'
           kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
 
-          # 7. Generate and store the worker cluster-join command dynamically into SSM
+          # Wait for API server and CNI to be ready
+          sleep 15
+
+          # Install aws-ebs-csi-driver via Helm
+          helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
+          helm repo update
+          helm install aws-ebs-csi-driver aws-ebs-csi-driver/aws-ebs-csi-driver --namespace kube-system
+
+          # 7. Generate external kubeconfig (pointing to Elastic IP) and upload to SSM Parameter Store
+          cp /etc/kubernetes/admin.conf /tmp/kubeconfig.yaml
+          sed -i "s/10.240.0.11/${ControlPlaneEIP}/g" /tmp/kubeconfig.yaml
+          aws ssm put-parameter --name "/kubeadm/kubeconfig" --value "$(cat /tmp/kubeconfig.yaml)" --type "String" --tier "Intelligent-Tiering" --overwrite --region ${AWS::Region}
+
+          # 8. Generate and store the worker cluster-join command dynamically into SSM
           JOIN_CMD=$(kubeadm token create --print-join-command)
           aws ssm put-parameter --name "/kubeadm/join-command" --value "$JOIN_CMD" --type "String" --overwrite --region ${AWS::Region}
+
+          # 9. Create maintenance script to renew certificates and update SSM kubeconfig weekly
+          cat <<'EOF' > /usr/local/bin/k8s-maintenance.sh
+          #!/bin/bash
+          set -e
+
+          echo "Starting Kubernetes maintenance and cert renewal..."
+
+          # Renew all certificates
+          kubeadm certs renew all
+
+          # Restart kubelet to reload certificates
+          systemctl restart kubelet
+
+          # Wait for API server to become ready again
+          until kubectl get nodes --raw /healthz >/dev/null 2>&1; do
+            sleep 2
+          done
+
+          # Update ubuntu user's kubeconfig
+          cp -i /etc/kubernetes/admin.conf /home/ubuntu/.kube/config
+          chown ubuntu:ubuntu /home/ubuntu/.kube/config
+
+          # Update the external kubeconfig in SSM Parameter Store
+          cp /etc/kubernetes/admin.conf /tmp/kubeconfig.yaml
+          sed -i "s/10.240.0.11/${ControlPlaneEIP}/g" /tmp/kubeconfig.yaml
+          aws ssm put-parameter --name "/kubeadm/kubeconfig" --value "$(cat /tmp/kubeconfig.yaml)" --type "String" --tier "Intelligent-Tiering" --overwrite --region ${AWS::Region}
+
+          echo "Kubernetes maintenance completed successfully."
+          EOF
+
+          chmod +x /usr/local/bin/k8s-maintenance.sh
+
+          # Register the cronjob to run every Sunday at midnight
+          echo "0 0 * * 0 root /usr/local/bin/k8s-maintenance.sh >> /var/log/k8s-maintenance.log 2>&1" | tee /etc/cron.d/k8s-maintenance
 
   # --- WORKER NODE 0 ---
   Worker0:
@@ -260,3 +373,11 @@ Outputs:
   ControlPlanePublicIP:
     Description: 'Public IP of the Master Control Plane Node'
     Value: !GetAtt ControlPlane0.PublicIp
+
+  ControlPlaneElasticIP:
+    Description: 'Elastic IP of the Control Plane Node'
+    Value: !Ref ControlPlaneEIP
+
+  GitHubActionsRunnerRoleARN:
+    Description: 'ARN of the IAM Role for GitHub Actions runner to assume'
+    Value: !GetAtt GitHubActionsRunnerRole.Arn
