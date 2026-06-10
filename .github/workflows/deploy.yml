@@ -31,11 +31,12 @@ jobs:
         run: |
           aws cloudformation deploy \
             --template-file kube-cfn.yml \
-            --stack-name k8s-modern-cluster \
+            --stack-name kube \
             --capabilities CAPABILITY_NAMED_IAM \
             --parameter-overrides \
               GitHubOrg=${{ github.repository_owner }} \
               GitHubRepo=${{ github.event.repository.name }} \
+              KeyPairName=kubeworld-except-it-works-this-time \
             --no-fail-on-empty-changeset
 
       - name: Fetch Security Group ID from SSM
