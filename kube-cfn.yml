@@ -77,6 +77,17 @@ Resources:
               StringLike:
                 'token.actions.githubusercontent.com:sub': !Sub 'repo:${GitHubOrg}/${GitHubRepo}:*'
       Policies:
+        - PolicyName: 'CloudFormationDeployAccess'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'cloudformation:*'
+                  - 'ec2:*'
+                  - 'iam:*'
+                  - 'ssm:*'
+                Resource: '*'
         - PolicyName: 'SSMParameterAccess'
           PolicyDocument:
             Version: '2012-10-17'
