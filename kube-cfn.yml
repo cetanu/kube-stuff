@@ -6,6 +6,11 @@ Parameters:
     Description: 'Name of an existing EC2 KeyPair for SSH access to the nodes'
     Type: 'AWS::EC2::KeyPair::KeyName'
 
+  YourIP:
+    Description: 'The CIDR block allowed to access SSH and the K8s API (e.g., 203.0.113.50/32)'
+    Type: String
+    Default: '0.0.0.0/0'
+
   GitHubOrg:
     Description: 'GitHub organization or owner (e.g., my-org)'
     Type: String
@@ -142,7 +147,6 @@ Resources:
         - {IpProtocol: '-1', CidrIp: '10.244.0.0/16'}
         # External management access
         - {IpProtocol: tcp, FromPort: 22, ToPort: 22, CidrIp: !Ref YourIP}
-        - {IpProtocol: tcp, FromPort: 6443, ToPort: 6443, CidrIp: !Ref YourIP}
       SecurityGroupEgress:
         - {IpProtocol: '-1', CidrIp: '0.0.0.0/0'}
 
