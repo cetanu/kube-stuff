@@ -61,8 +61,9 @@ flannel_apply:
 
 aws-cloud-controller-manager-repo:
   helm.repo_managed:
-    - name: aws-cloud-controller-manager
-    - url: https://kubernetes.github.io/cloud-provider-aws
+    - present:
+      - name: aws-cloud-controller-manager
+        url: https://kubernetes.github.io/cloud-provider-aws
 
 aws-ccm:
   helm.release_present:
@@ -84,8 +85,9 @@ aws-ccm:
 
 aws-ebs-csi-driver-repo:
   helm.repo_managed:
-    - name: aws-ebs-csi-driver
-    - url: https://kubernetes-sigs.github.io/aws-ebs-csi-driver
+    - present:
+      - name: aws-ebs-csi-driver
+        url: https://kubernetes-sigs.github.io/aws-ebs-csi-driver
 
 ebs_csi_driver:
   helm.release_present:
