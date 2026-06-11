@@ -21,6 +21,11 @@ Parameters:
     Type: String
     Default: 'my-repo'
 
+  PodCIDR:
+    Description: 'The CIDR block for the Kubernetes Pod Network'
+    Type: String
+    Default: '10.244.0.0/16'
+
 Resources:
   # --- IAM CONFIGURATION FOR KUBEADM JOIN KEY EXCHANGE ---
   InstanceRole:
@@ -198,7 +203,7 @@ Resources:
         # Full internal cluster communication (Nodes talking to each other)
         - {IpProtocol: '-1', CidrIp: '10.240.0.0/24'}
         # Flannel overlay pod network communication space
-        - {IpProtocol: '-1', CidrIp: '10.244.0.0/16'}
+        - {IpProtocol: '-1', CidrIp: !Ref PodCIDR}
         # External management access
         - {IpProtocol: tcp, FromPort: 22, ToPort: 22, CidrIp: !Ref YourIP}
         # Valheim standard UDP ports
@@ -273,7 +278,7 @@ Resources:
           echo "provider_id: aws:///$AZ/$INSTANCE_ID" >> /etc/salt/grains
 
           # -------------- Initial Bootstrap Run --------------
-          salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}'}"
+          salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}', pod_cidr: '${PodCIDR}'}"
 
           if [ "$ROLE" == "controlplane" ]; then
             LOCAL=$(git -C /srv/salt-repo rev-parse HEAD)
@@ -324,7 +329,7 @@ Resources:
           echo "provider_id: aws:///$AZ/$INSTANCE_ID" >> /etc/salt/grains
 
           # -------------- Initial Bootstrap Run --------------
-          salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}'}"
+          salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}', pod_cidr: '${PodCIDR}'}"
 
   # --- WORKER NODE 1 ---
   Worker1:
@@ -370,7 +375,7 @@ Resources:
           echo "provider_id: aws:///$AZ/$INSTANCE_ID" >> /etc/salt/grains
 
           # -------------- Initial Bootstrap Run --------------
-          salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}'}"
+          salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}', pod_cidr: '${PodCIDR}'}"
 
 Outputs:
   GitHubActionsRunnerRoleARN:

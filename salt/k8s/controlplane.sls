@@ -25,7 +25,7 @@ kubeadm_config:
         kubernetesVersion: "1.30.0"
         clusterName: "kubernetes"
         networking:
-          podSubnet: "10.244.0.0/16"
+          podSubnet: "{{ salt['pillar.get']('pod_cidr', '10.244.0.0/16') }}"
         apiServer:
           certSANs:
             - "10.240.0.11"
@@ -64,7 +64,10 @@ root_kubeconfig:
 
 flannel_apply:
   cmd.run:
-    - name: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+    - name: |
+        curl -sL https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml -o /tmp/kube-flannel.yml
+        sed -i "s|10.244.0.0/16|{{ salt['pillar.get']('pod_cidr', '10.244.0.0/16') }}|g" /tmp/kube-flannel.yml
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /tmp/kube-flannel.yml
     - require:
       - cmd: kubeadm_init
 
@@ -85,7 +88,7 @@ aws-ccm:
       - "args[1]=--cloud-provider=aws"
       - "args[2]=--cluster-name=kubernetes"
       - "args[3]=--allocate-node-cidrs=true"
-      - "args[4]=--cluster-cidr=10.244.0.0/16"
+      - "args[4]=--cluster-cidr={{ salt['pillar.get']('pod_cidr', '10.244.0.0/16') }}"
       - "args[5]=--configure-cloud-routes=false"
     - require:
       - cmd: helm_install
