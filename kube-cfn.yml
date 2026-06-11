@@ -260,11 +260,10 @@ Resources:
             sleep 2
           done
 
-          echo "Waiting for cloud-init to complete..."
-          while [ ! -f /var/lib/cloud/instance/boot-finished ]; do
-            sleep 2
+          echo "Waiting for apt/dpkg locks to release..."
+          while fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock /var/lib/dpkg/lock >/dev/null 2>&1 ; do
+              sleep 2
           done
-          echo "Cloud-init is ready!"
 
           # ------------- Bootstrap SaltStack --------------
           apt-get update && apt-get install -y curl git awscli jq
@@ -317,11 +316,10 @@ Resources:
             sleep 2
           done
 
-          echo "Waiting for cloud-init to complete..."
-          while [ ! -f /var/lib/cloud/instance/boot-finished ]; do
-            sleep 2
+          echo "Waiting for apt/dpkg locks to release..."
+          while fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock /var/lib/dpkg/lock >/dev/null 2>&1 ; do
+              sleep 2
           done
-          echo "Cloud-init is ready!"
 
           # ------------- Bootstrap SaltStack --------------
           apt-get update && apt-get install -y curl git awscli jq
@@ -369,11 +367,10 @@ Resources:
             sleep 2
           done
 
-          echo "Waiting for cloud-init to complete..."
-          while [ ! -f /var/lib/cloud/instance/boot-finished ]; do
-            sleep 2
+          echo "Waiting for apt/dpkg locks to release..."
+          while fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock /var/lib/dpkg/lock >/dev/null 2>&1 ; do
+              sleep 2
           done
-          echo "Cloud-init is ready!"
 
           # ------------- Bootstrap SaltStack --------------
           apt-get update && apt-get install -y curl git awscli jq
