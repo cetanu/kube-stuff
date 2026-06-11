@@ -240,7 +240,7 @@ Resources:
     Type: 'AWS::EC2::Instance'
     Properties:
       ImageId: 'ami-0a59248a6294cece2' # Ubuntu 22.04 LTS (us-east-1)
-      InstanceType: 't3.small' # Minimum spec for control plane
+      InstanceType: 't3.medium' # Minimum spec for control plane
       KeyName: !Ref KeyPairName
       IamInstanceProfile: !Ref InstanceProfile
       SecurityGroupIds: [!Ref ClusterSG]
@@ -291,7 +291,7 @@ Resources:
     DependsOn: ControlPlane0
     Properties:
       ImageId: 'ami-0a59248a6294cece2'
-      InstanceType: 't3.small'
+      InstanceType: 't3.medium'
       KeyName: !Ref KeyPairName
       IamInstanceProfile: !Ref InstanceProfile
       SecurityGroupIds: [!Ref ClusterSG]
@@ -337,7 +337,7 @@ Resources:
     DependsOn: ControlPlane0
     Properties:
       ImageId: 'ami-0a59248a6294cece2'
-      InstanceType: 't3.small'
+      InstanceType: 't3.medium'
       KeyName: !Ref KeyPairName
       IamInstanceProfile: !Ref InstanceProfile
       SecurityGroupIds: [!Ref ClusterSG]

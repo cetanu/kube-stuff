@@ -1,6 +1,14 @@
 include:
   - k8s.common
 
+kubelet_config:
+  file.managed:
+    - name: /etc/default/kubelet
+    - contents: |
+        KUBELET_EXTRA_ARGS=--cloud-provider=external
+    - require:
+      - pkg: k8s_packages
+
 helm_install:
   cmd.run:
     - name: curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
@@ -83,6 +91,7 @@ aws-ccm:
     - chart: aws-cloud-controller-manager/aws-cloud-controller-manager
     - namespace: kube-system
     - set:
+      - hostNetwork=true
       - hostNetworking=true
       - "args[0]=--v=2"
       - "args[1]=--cloud-provider=aws"
@@ -95,6 +104,12 @@ aws-ccm:
       - cmd: flannel_apply
       - helm: aws-cloud-controller-manager-repo
       - file: root_kubeconfig
+
+aws-ccm-patch:
+  cmd.run:
+    - name: kubectl --kubeconfig=/etc/kubernetes/admin.conf patch ds aws-cloud-controller-manager -n kube-system -p '{"spec":{"template":{"spec":{"hostNetwork":true}}}}' || true
+    - require:
+      - helm: aws-ccm
 
 aws-ebs-csi-driver-repo:
   helm.repo_managed:

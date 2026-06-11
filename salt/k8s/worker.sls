@@ -4,7 +4,7 @@ include:
 kubelet_defaults:
   file.managed:
     - name: /etc/default/kubelet
-    - contents: 'KUBELET_EXTRA_ARGS="--provider-id={{ salt['grains.get']('provider_id') }}"'
+    - contents: 'KUBELET_EXTRA_ARGS="--cloud-provider=external --provider-id={{ salt['grains.get']('provider_id') }}"'
     - require:
       - pkg: k8s_packages
 
