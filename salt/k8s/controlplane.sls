@@ -145,7 +145,7 @@ envoy_gateway:
   helm.release_present:
     - name: eg
     - chart: oci://docker.io/envoyproxy/gateway-helm
-    - version: v1.1.1
+    - version: v1.8.1
     - namespace: envoy-gateway-system
     - require:
       - cmd: helm_install
