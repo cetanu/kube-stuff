@@ -267,8 +267,10 @@ Resources:
           # -------------- Set up Salt grains --------------
           TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
           INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
+          AZ=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
           ROLE=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=Role" --region ${AWS::Region} --query "Tags[0].Value" --output text)
           echo "role: $ROLE" > /etc/salt/grains
+          echo "provider_id: aws:///$AZ/$INSTANCE_ID" >> /etc/salt/grains
 
           # -------------- Initial Bootstrap Run --------------
           salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}'}"
@@ -316,8 +318,10 @@ Resources:
           # -------------- Set up Salt grains --------------
           TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
           INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
+          AZ=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
           ROLE=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=Role" --region ${AWS::Region} --query "Tags[0].Value" --output text)
           echo "role: $ROLE" > /etc/salt/grains
+          echo "provider_id: aws:///$AZ/$INSTANCE_ID" >> /etc/salt/grains
 
           # -------------- Initial Bootstrap Run --------------
           salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}'}"
@@ -360,8 +364,10 @@ Resources:
           # -------------- Set up Salt grains --------------
           TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
           INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
+          AZ=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
           ROLE=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=Role" --region ${AWS::Region} --query "Tags[0].Value" --output text)
           echo "role: $ROLE" > /etc/salt/grains
+          echo "provider_id: aws:///$AZ/$INSTANCE_ID" >> /etc/salt/grains
 
           # -------------- Initial Bootstrap Run --------------
           salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}'}"

@@ -18,6 +18,7 @@ kubeadm_config:
         nodeRegistration:
           kubeletExtraArgs:
             cloud-provider: external
+            provider-id: "{{ salt['grains.get']('provider_id') }}"
         ---
         apiVersion: kubeadm.k8s.io/v1beta3
         kind: ClusterConfiguration
@@ -82,6 +83,10 @@ aws-ccm:
       - hostNetworking=true
       - "args[0]=--v=2"
       - "args[1]=--cloud-provider=aws"
+      - "args[2]=--cluster-name=kubernetes"
+      - "args[3]=--allocate-node-cidrs=true"
+      - "args[4]=--cluster-cidr=10.244.0.0/16"
+      - "args[5]=--configure-cloud-routes=false"
     - require:
       - cmd: helm_install
       - cmd: flannel_apply
