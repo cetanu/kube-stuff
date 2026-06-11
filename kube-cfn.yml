@@ -256,6 +256,7 @@ Resources:
 
           # ------------- Bootstrap SaltStack --------------
           apt-get update && apt-get install -y curl git awscli jq
+          curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor > /etc/apt/keyrings/salt-archive-keyring.pgp
           curl -o bootstrap-salt.sh -L https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh
           sh bootstrap-salt.sh -P stable 3006.1
 
@@ -302,6 +303,7 @@ Resources:
 
           # ------------- Bootstrap SaltStack --------------
           apt-get update && apt-get install -y curl git awscli jq
+          curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor > /etc/apt/keyrings/salt-archive-keyring.pgp
           curl -o bootstrap-salt.sh -L https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh
           sh bootstrap-salt.sh -P stable 3006.1
 
@@ -336,6 +338,7 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
+          set -eux
           # ------------- Network check --------------
           until curl -s --connect-timeout 2 aws.amazon.com > /dev/null; do
             sleep 2
@@ -343,6 +346,7 @@ Resources:
 
           # ------------- Bootstrap SaltStack --------------
           apt-get update && apt-get install -y curl git awscli jq
+          curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor > /etc/apt/keyrings/salt-archive-keyring.pgp
           curl -o bootstrap-salt.sh -L https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh
           sh bootstrap-salt.sh -P stable 3006.1
 
