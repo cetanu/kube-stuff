@@ -260,6 +260,12 @@ Resources:
             sleep 2
           done
 
+          echo "Waiting for cloud-init to complete..."
+          while [ ! -f /var/lib/cloud/instance/boot-finished ]; do
+            sleep 2
+          done
+          echo "Cloud-init is ready!"
+
           # ------------- Bootstrap SaltStack --------------
           apt-get update && apt-get install -y curl git awscli jq
           curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor > /etc/apt/keyrings/salt-archive-keyring.pgp
@@ -311,6 +317,12 @@ Resources:
             sleep 2
           done
 
+          echo "Waiting for cloud-init to complete..."
+          while [ ! -f /var/lib/cloud/instance/boot-finished ]; do
+            sleep 2
+          done
+          echo "Cloud-init is ready!"
+
           # ------------- Bootstrap SaltStack --------------
           apt-get update && apt-get install -y curl git awscli jq
           curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor > /etc/apt/keyrings/salt-archive-keyring.pgp
@@ -356,6 +368,12 @@ Resources:
           until curl -s --connect-timeout 2 aws.amazon.com > /dev/null; do
             sleep 2
           done
+
+          echo "Waiting for cloud-init to complete..."
+          while [ ! -f /var/lib/cloud/instance/boot-finished ]; do
+            sleep 2
+          done
+          echo "Cloud-init is ready!"
 
           # ------------- Bootstrap SaltStack --------------
           apt-get update && apt-get install -y curl git awscli jq
