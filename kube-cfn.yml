@@ -256,8 +256,8 @@ Resources:
 
           # ------------- Bootstrap SaltStack --------------
           apt-get update && apt-get install -y curl git awscli jq
-          curl -L https://bootstrap.saltproject.io -o install_salt.sh
-          sh install_salt.sh
+          curl -o bootstrap-salt.sh -L https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh
+          sh bootstrap-salt.sh -P stable 3006.1
 
           git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
 
@@ -302,8 +302,8 @@ Resources:
 
           # ------------- Bootstrap SaltStack --------------
           apt-get update && apt-get install -y curl git awscli jq
-          curl -L https://bootstrap.saltproject.io -o install_salt.sh
-          sh install_salt.sh
+          curl -o bootstrap-salt.sh -L https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh
+          sh bootstrap-salt.sh -P stable 3006.1
 
           git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
 
@@ -343,8 +343,8 @@ Resources:
 
           # ------------- Bootstrap SaltStack --------------
           apt-get update && apt-get install -y curl git awscli jq
-          curl -L https://bootstrap.saltproject.io -o install_salt.sh
-          sh install_salt.sh
+          curl -o bootstrap-salt.sh -L https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh
+          sh bootstrap-salt.sh -P stable 3006.1
 
           git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
 
