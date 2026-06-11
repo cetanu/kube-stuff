@@ -70,14 +70,11 @@ aws-ccm:
     - name: aws-cloud-controller-manager
     - chart: aws-cloud-controller-manager/aws-cloud-controller-manager
     - namespace: kube-system
-    - kubeconfig: /etc/kubernetes/admin.conf
-    - set:
-      - name: hostNetworking
-        value: "true"
-      - name: args[0]
-        value: "--v=2"
-      - name: args[1]
-        value: "--cloud-provider=aws"
+    - kvflags:
+        kubeconfig: /etc/kubernetes/admin.conf
+        hostNetworking: "true"
+        "--v": "2"
+        "--cloud-provider": aws
     - require:
       - cmd: helm_install
       - cmd: flannel_apply
@@ -94,7 +91,8 @@ ebs_csi_driver:
     - name: aws-ebs-csi-driver
     - chart: aws-ebs-csi-driver/aws-ebs-csi-driver
     - namespace: kube-system
-    - kubeconfig: /etc/kubernetes/admin.conf
+    - kvflags:
+        kubeconfig: /etc/kubernetes/admin.conf
     - require:
       - cmd: helm_install
       - cmd: flannel_apply
@@ -119,7 +117,8 @@ envoy_gateway:
     - chart: oci://docker.io/envoyproxy/gateway-helm
     - version: v1.1.1
     - namespace: envoy-gateway-system
-    - kubeconfig: /etc/kubernetes/admin.conf
+    - kvflags:
+        kubeconfig: /etc/kubernetes/admin.conf
     - require:
       - cmd: helm_install
       - cmd: gateway_api_crds
