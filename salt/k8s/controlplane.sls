@@ -53,6 +53,14 @@ kubeconfig_setup:
     - require:
       - cmd: kubeadm_init
 
+root_kubeconfig:
+  file.symlink:
+    - name: /root/.kube/config
+    - target: /etc/kubernetes/admin.conf
+    - makedirs: True
+    - require:
+      - cmd: kubeadm_init
+
 flannel_apply:
   cmd.run:
     - name: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
@@ -70,15 +78,15 @@ aws-ccm:
     - name: aws-cloud-controller-manager
     - chart: aws-cloud-controller-manager/aws-cloud-controller-manager
     - namespace: kube-system
-    - kvflags:
-        kubeconfig: /etc/kubernetes/admin.conf
-        hostNetworking: "true"
-        "--v": "2"
-        "--cloud-provider": aws
+    - set:
+      - hostNetworking=true
+      - "args[0]=--v=2"
+      - "args[1]=--cloud-provider=aws"
     - require:
       - cmd: helm_install
       - cmd: flannel_apply
       - helm: aws-cloud-controller-manager-repo
+      - file: root_kubeconfig
 
 aws-ebs-csi-driver-repo:
   helm.repo_managed:
@@ -91,12 +99,11 @@ ebs_csi_driver:
     - name: aws-ebs-csi-driver
     - chart: aws-ebs-csi-driver/aws-ebs-csi-driver
     - namespace: kube-system
-    - kvflags:
-        kubeconfig: /etc/kubernetes/admin.conf
     - require:
       - cmd: helm_install
       - cmd: flannel_apply
       - helm: aws-ebs-csi-driver-repo
+      - file: root_kubeconfig
 
 gateway_api_crds:
   cmd.run:
@@ -117,12 +124,11 @@ envoy_gateway:
     - chart: oci://docker.io/envoyproxy/gateway-helm
     - version: v1.1.1
     - namespace: envoy-gateway-system
-    - kvflags:
-        kubeconfig: /etc/kubernetes/admin.conf
     - require:
       - cmd: helm_install
       - cmd: gateway_api_crds
       - cmd: envoy_gateway_ns
+      - file: root_kubeconfig
 
 ssm_kubeconfig:
   cmd.run:

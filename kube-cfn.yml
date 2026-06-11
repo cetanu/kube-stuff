@@ -260,6 +260,7 @@ Resources:
           curl -o bootstrap-salt.sh -L https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh
           sh bootstrap-salt.sh -P stable 3006.1
 
+          rm -rf /srv/salt-repo
           git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
 
           # -------------- Set up Salt grains --------------
@@ -307,6 +308,7 @@ Resources:
           curl -o bootstrap-salt.sh -L https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh
           sh bootstrap-salt.sh -P stable 3006.1
 
+          rm -rf /srv/salt-repo
           git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
 
           # -------------- Set up Salt grains --------------
@@ -350,6 +352,7 @@ Resources:
           curl -o bootstrap-salt.sh -L https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh
           sh bootstrap-salt.sh -P stable 3006.1
 
+          rm -rf /srv/salt-repo
           git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
 
           # -------------- Set up Salt grains --------------
