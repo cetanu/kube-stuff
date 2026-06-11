@@ -128,18 +128,21 @@ ebs_csi_driver:
       - helm: aws-ebs-csi-driver-repo
       - file: root_kubeconfig
 
-gateway_api_crds:
-  cmd.run:
-    - name: |
-        export KUBECONFIG=/etc/kubernetes/admin.conf
-        kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.1.0/experimental-install.yaml
-    - require:
-      - cmd: kubeadm_init
+gateway_api_crds_repo:
+  helm.repo_managed:
+    - present:
+      - name: wiremind
+        url: https://wiremind.github.io/wiremind-helm-charts
 
-envoy_gateway_ns:
-  cmd.run:
-    - name: kubectl create ns envoy-gateway-system --kubeconfig=/etc/kubernetes/admin.conf
-    - unless: kubectl get ns envoy-gateway-system --kubeconfig=/etc/kubernetes/admin.conf
+gateway_api_crds:
+  helm.release_present:
+    - name: gateway-api-crds
+    - chart: wiremind/gateway-api-crds
+    - version: 1.5.1
+    - require:
+      - helm: gateway_api_crds_repo
+      - cmd: helm_install
+      - file: root_kubeconfig
 
 envoy_gateway:
   helm.release_present:
@@ -147,10 +150,11 @@ envoy_gateway:
     - chart: oci://docker.io/envoyproxy/gateway-helm
     - version: v1.8.1
     - namespace: envoy-gateway-system
+    - flags:
+      - "--create-namespace"
     - require:
       - cmd: helm_install
-      - cmd: gateway_api_crds
-      - cmd: envoy_gateway_ns
+      - helm: gateway_api_crds
       - file: root_kubeconfig
 
 ssm_kubeconfig:
