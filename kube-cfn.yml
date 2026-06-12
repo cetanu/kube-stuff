@@ -225,7 +225,7 @@ Resources:
           curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor | sudo tee /etc/apt/keyrings/salt-archive-keyring.pgp > /dev/null
           curl -fsSL https://github.com/saltstack/salt-install-guide/releases/latest/download/salt.sources | sudo tee /etc/apt/sources.list.d/salt.sources
           apt-get update
-          curl -o bootstrap-salt.sh -fsSL https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh; do
+          curl -o bootstrap-salt.sh -fsSL https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh
           sh bootstrap-salt.sh -U -P stable 3006.1
           rm -rf /srv/salt-repo
           git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
@@ -288,7 +288,7 @@ Resources:
           curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor | sudo tee /etc/apt/keyrings/salt-archive-keyring.pgp > /dev/null
           curl -fsSL https://github.com/saltstack/salt-install-guide/releases/latest/download/salt.sources | sudo tee /etc/apt/sources.list.d/salt.sources
           apt-get update
-          curl -o bootstrap-salt.sh -fsSL https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh; do
+          curl -o bootstrap-salt.sh -fsSL https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh
           sh bootstrap-salt.sh -U -P stable 3006.1
           rm -rf /srv/salt-repo
           git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
@@ -346,7 +346,7 @@ Resources:
           curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor | sudo tee /etc/apt/keyrings/salt-archive-keyring.pgp > /dev/null
           curl -fsSL https://github.com/saltstack/salt-install-guide/releases/latest/download/salt.sources | sudo tee /etc/apt/sources.list.d/salt.sources
           apt-get update
-          curl -o bootstrap-salt.sh -fsSL https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh; do
+          curl -o bootstrap-salt.sh -fsSL https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh
           sh bootstrap-salt.sh -U -P stable 3006.1
           rm -rf /srv/salt-repo
           git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
