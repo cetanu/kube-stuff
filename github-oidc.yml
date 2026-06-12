@@ -57,8 +57,8 @@ Resources:
                   - 'cloudformation:ExecuteChangeSet'
                   - 'cloudformation:DeleteChangeSet'
                 Resource:
-                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/kube/*'
-                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/kube'
+                  - !Sub 'arn:aws:cloudformation:*:${AWS::AccountId}:stack/kube/*'
+                  - !Sub 'arn:aws:cloudformation:*:${AWS::AccountId}:stack/kube'
               - Effect: Allow
                 Action:
                   - 'iam:CreateRole'
@@ -90,7 +90,7 @@ Resources:
                   - 'autoscaling:SetDesiredCapacity'
                   - 'autoscaling:TerminateInstanceInAutoScalingGroup'
                 Resource:
-                  - !Sub 'arn:aws:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/kube-*'
+                  - !Sub 'arn:aws:autoscaling:*:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/kube-*'
               - Effect: Allow
                 Action:
                   - 'autoscaling:DescribeAutoScalingGroups'
@@ -106,7 +106,7 @@ Resources:
                   - 'ssm:AddTagsToResource'
                   - 'ssm:RemoveTagsFromResource'
                 Resource:
-                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/kubeadm/*'
+                  - !Sub 'arn:aws:ssm:*:${AWS::AccountId}:parameter/kubeadm/*'
               - Effect: Allow
                 Action:
                   - 's3:CreateBucket'
@@ -119,8 +119,8 @@ Resources:
                   - 's3:GetObject'
                   - 's3:DeleteObject'
                 Resource:
-                  - !Sub 'arn:aws:s3:::k8s-bootstrap-logs-${AWS::AccountId}-${AWS::Region}'
-                  - !Sub 'arn:aws:s3:::k8s-bootstrap-logs-${AWS::AccountId}-${AWS::Region}/*'
+                  - !Sub 'arn:aws:s3:::k8s-bootstrap-logs-${AWS::AccountId}-*'
+                  - !Sub 'arn:aws:s3:::k8s-bootstrap-logs-${AWS::AccountId}-*/*'
               - Effect: Allow
                 Action:
                   # VPC & Networking
@@ -184,8 +184,8 @@ Resources:
                 Action:
                   - 'ssm:GetParameter'
                 Resource:
-                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/kubeadm/kubeconfig'
-                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/kubeadm/security-group-id'
+                  - !Sub 'arn:aws:ssm:*:${AWS::AccountId}:parameter/kubeadm/kubeconfig'
+                  - !Sub 'arn:aws:ssm:*:${AWS::AccountId}:parameter/kubeadm/security-group-id'
         - PolicyName: 'EC2SecurityGroupAccess'
           PolicyDocument:
             Version: '2012-10-17'
@@ -194,7 +194,7 @@ Resources:
                 Action:
                   - 'ec2:AuthorizeSecurityGroupIngress'
                   - 'ec2:RevokeSecurityGroupIngress'
-                Resource: !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*'
+                Resource: !Sub 'arn:aws:ec2:*:${AWS::AccountId}:security-group/*'
               - Effect: Allow
                 Action:
                   - 'ec2:DescribeSecurityGroups'
