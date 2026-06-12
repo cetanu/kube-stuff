@@ -45,11 +45,135 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  - 'cloudformation:*'
-                  - 'ec2:*'
-                  - 'iam:*'
-                  - 'ssm:*'
-                  - 's3:*'
+                  - 'cloudformation:CreateStack'
+                  - 'cloudformation:DescribeStacks'
+                  - 'cloudformation:UpdateStack'
+                  - 'cloudformation:DeleteStack'
+                  - 'cloudformation:DescribeStackEvents'
+                  - 'cloudformation:GetTemplate'
+                  - 'cloudformation:GetTemplateSummary'
+                  - 'cloudformation:CreateChangeSet'
+                  - 'cloudformation:DescribeChangeSet'
+                  - 'cloudformation:ExecuteChangeSet'
+                  - 'cloudformation:DeleteChangeSet'
+                Resource:
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/kube/*'
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/kube'
+              - Effect: Allow
+                Action:
+                  - 'iam:CreateRole'
+                  - 'iam:DeleteRole'
+                  - 'iam:GetRole'
+                  - 'iam:PutRolePolicy'
+                  - 'iam:DeleteRolePolicy'
+                  - 'iam:GetRolePolicy'
+                  - 'iam:AttachRolePolicy'
+                  - 'iam:DetachRolePolicy'
+                  - 'iam:CreateInstanceProfile'
+                  - 'iam:DeleteInstanceProfile'
+                  - 'iam:GetInstanceProfile'
+                  - 'iam:AddRoleToInstanceProfile'
+                  - 'iam:RemoveRoleFromInstanceProfile'
+                Resource:
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/kube-*'
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:instance-profile/kube-*'
+              - Effect: Allow
+                Action:
+                  - 'iam:PassRole'
+                Resource:
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/kube-*'
+              - Effect: Allow
+                Action:
+                  - 'autoscaling:CreateAutoScalingGroup'
+                  - 'autoscaling:UpdateAutoScalingGroup'
+                  - 'autoscaling:DeleteAutoScalingGroup'
+                  - 'autoscaling:SetDesiredCapacity'
+                  - 'autoscaling:TerminateInstanceInAutoScalingGroup'
+                Resource:
+                  - !Sub 'arn:aws:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/kube-*'
+              - Effect: Allow
+                Action:
+                  - 'autoscaling:DescribeAutoScalingGroups'
+                  - 'autoscaling:DescribeLaunchConfigurations'
+                  - 'autoscaling:DescribeScalingActivities'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'ssm:PutParameter'
+                  - 'ssm:DeleteParameter'
+                  - 'ssm:GetParameter'
+                  - 'ssm:GetParameters'
+                  - 'ssm:AddTagsToResource'
+                  - 'ssm:RemoveTagsFromResource'
+                Resource:
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/kubeadm/*'
+              - Effect: Allow
+                Action:
+                  - 's3:CreateBucket'
+                  - 's3:DeleteBucket'
+                  - 's3:PutBucketEncryption'
+                  - 's3:PutBucketPublicAccessBlock'
+                  - 's3:GetBucketLocation'
+                  - 's3:ListBucket'
+                  - 's3:GetObject'
+                  - 's3:DeleteObject'
+                Resource:
+                  - !Sub 'arn:aws:s3:::k8s-bootstrap-logs-${AWS::AccountId}-${AWS::Region}'
+                  - !Sub 'arn:aws:s3:::k8s-bootstrap-logs-${AWS::AccountId}-${AWS::Region}/*'
+              - Effect: Allow
+                Action:
+                  # VPC & Networking
+                  - 'ec2:CreateVpc'
+                  - 'ec2:DeleteVpc'
+                  - 'ec2:DescribeVpcs'
+                  - 'ec2:ModifyVpcAttribute'
+                  - 'ec2:CreateSubnet'
+                  - 'ec2:DeleteSubnet'
+                  - 'ec2:DescribeSubnets'
+                  - 'ec2:ModifySubnetAttribute'
+                  - 'ec2:CreateInternetGateway'
+                  - 'ec2:DeleteInternetGateway'
+                  - 'ec2:DescribeInternetGateways'
+                  - 'ec2:AttachInternetGateway'
+                  - 'ec2:DetachInternetGateway'
+                  - 'ec2:CreateRouteTable'
+                  - 'ec2:DeleteRouteTable'
+                  - 'ec2:DescribeRouteTables'
+                  - 'ec2:AssociateRouteTable'
+                  - 'ec2:DisassociateRouteTable'
+                  - 'ec2:CreateRoute'
+                  - 'ec2:DeleteRoute'
+                  # Security Groups
+                  - 'ec2:CreateSecurityGroup'
+                  - 'ec2:DeleteSecurityGroup'
+                  - 'ec2:DescribeSecurityGroups'
+                  - 'ec2:AuthorizeSecurityGroupIngress'
+                  - 'ec2:RevokeSecurityGroupIngress'
+                  - 'ec2:AuthorizeSecurityGroupEgress'
+                  - 'ec2:RevokeSecurityGroupEgress'
+                  # Elastic IPs
+                  - 'ec2:AllocateAddress'
+                  - 'ec2:ReleaseAddress'
+                  - 'ec2:DescribeAddresses'
+                  - 'ec2:AssociateAddress'
+                  - 'ec2:DisassociateAddress'
+                  # Instances & Launch Templates
+                  - 'ec2:RunInstances'
+                  - 'ec2:TerminateInstances'
+                  - 'ec2:DescribeInstances'
+                  - 'ec2:DescribeInstanceStatus'
+                  - 'ec2:ModifyInstanceAttribute'
+                  - 'ec2:CreateLaunchTemplate'
+                  - 'ec2:DeleteLaunchTemplate'
+                  - 'ec2:DescribeLaunchTemplates'
+                  - 'ec2:DescribeLaunchTemplateVersions'
+                  # Tags
+                  - 'ec2:CreateTags'
+                  - 'ec2:DeleteTags'
+                  # Discovery
+                  - 'ec2:DescribeAvailabilityZones'
+                  - 'ec2:DescribeAccountAttributes'
+                  - 'ec2:DescribeKeyPairs'
                 Resource: '*'
         - PolicyName: 'SSMParameterAccess'
           PolicyDocument:
