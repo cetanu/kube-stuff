@@ -242,7 +242,7 @@ Resources:
             sleep 5
           done
 
-          sh bootstrap-salt.sh -P stable 3006.1
+          sh bootstrap-salt.sh -U -P stable 3006.1
 
           rm -rf /srv/salt-repo
           git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
@@ -322,7 +322,7 @@ Resources:
             sleep 5
           done
 
-          sh bootstrap-salt.sh -P stable 3006.1
+          sh bootstrap-salt.sh -U -P stable 3006.1
 
           rm -rf /srv/salt-repo
           git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
@@ -397,7 +397,7 @@ Resources:
             sleep 5
           done
 
-          sh bootstrap-salt.sh -P stable 3006.1
+          sh bootstrap-salt.sh -U -P stable 3006.1
 
           rm -rf /srv/salt-repo
           git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
