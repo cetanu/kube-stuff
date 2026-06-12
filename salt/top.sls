@@ -5,10 +5,6 @@ base:
     - containerd
     - packages
     - salt-sync
-    - helm
-    - addons
-    - ssm
-    - maintenance
     - controlplane
 
   'role:worker':
