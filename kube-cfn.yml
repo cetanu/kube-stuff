@@ -90,6 +90,14 @@ Resources:
                   - 'ec2:RevokeSecurityGroupIngress'
                   - 'elasticloadbalancing:*'
                 Resource: '*'
+        - PolicyName: 'BootstrapLogsUpload'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                Resource: !Sub 'arn:aws:s3:::k8s-bootstrap-logs-${AWS::AccountId}-${AWS::Region}/*'
 
   InstanceProfile:
     Type: 'AWS::IAM::InstanceProfile'
@@ -204,7 +212,7 @@ Resources:
           # ------------- Setup Signaling --------------
           TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
           INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
-          trap 'aws cloudformation signal-resource --stack-name ${AWS::StackName} --logical-resource-id ControlPlane0 --status FAILURE --unique-id $INSTANCE_ID --region ${AWS::Region} || true' ERR
+          trap 'if command -v aws >/dev/null 2>&1; then aws s3 cp /var/log/cloud-init-output.log s3://k8s-bootstrap-logs-${AWS::AccountId}-${AWS::Region}/logs/$INSTANCE_ID-controlplane.log --region ${AWS::Region} || true; aws cloudformation signal-resource --stack-name ${AWS::StackName} --logical-resource-id ControlPlane0 --status FAILURE --unique-id $INSTANCE_ID --region ${AWS::Region} || true; fi' ERR
 
           # ------------- Network check --------------
           until curl -s --connect-timeout 2 aws.amazon.com > /dev/null; do
@@ -270,7 +278,7 @@ Resources:
           # ------------- Setup Signaling --------------
           TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
           INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
-          trap 'aws cloudformation signal-resource --stack-name ${AWS::StackName} --logical-resource-id Worker0 --status FAILURE --unique-id $INSTANCE_ID --region ${AWS::Region} || true' ERR
+          trap 'if command -v aws >/dev/null 2>&1; then aws s3 cp /var/log/cloud-init-output.log s3://k8s-bootstrap-logs-${AWS::AccountId}-${AWS::Region}/logs/$INSTANCE_ID-worker0.log --region ${AWS::Region} || true; aws cloudformation signal-resource --stack-name ${AWS::StackName} --logical-resource-id Worker0 --status FAILURE --unique-id $INSTANCE_ID --region ${AWS::Region} || true; fi' ERR
 
           # ------------- Network check --------------
           until curl -s --connect-timeout 2 aws.amazon.com > /dev/null; do
@@ -331,7 +339,7 @@ Resources:
           # ------------- Setup Signaling --------------
           TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
           INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
-          trap 'aws cloudformation signal-resource --stack-name ${AWS::StackName} --logical-resource-id Worker1 --status FAILURE --unique-id $INSTANCE_ID --region ${AWS::Region} || true' ERR
+          trap 'if command -v aws >/dev/null 2>&1; then aws s3 cp /var/log/cloud-init-output.log s3://k8s-bootstrap-logs-${AWS::AccountId}-${AWS::Region}/logs/$INSTANCE_ID-worker1.log --region ${AWS::Region} || true; aws cloudformation signal-resource --stack-name ${AWS::StackName} --logical-resource-id Worker1 --status FAILURE --unique-id $INSTANCE_ID --region ${AWS::Region} || true; fi' ERR
 
           # ------------- Network check --------------
           until curl -s --connect-timeout 2 aws.amazon.com > /dev/null; do
@@ -364,5 +372,20 @@ Resources:
           # -------------- Signal Success --------------
           trap - ERR
           aws cloudformation signal-resource --stack-name ${AWS::StackName} --logical-resource-id Worker1 --status SUCCESS --unique-id $INSTANCE_ID --region ${AWS::Region}
+
+  BootstrapLogBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub 'k8s-bootstrap-logs-${AWS::AccountId}-${AWS::Region}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: 'AES256'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
 
 
