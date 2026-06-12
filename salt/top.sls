@@ -1,8 +1,20 @@
 base:
   'role:controlplane':
     - match: grain
-    - k8s.controlplane
+    - sysctl
+    - containerd
+    - packages
+    - salt-sync
+    - helm
+    - addons
+    - ssm
+    - maintenance
+    - controlplane
 
   'role:worker':
     - match: grain
-    - k8s.worker
+    - sysctl
+    - containerd
+    - packages
+    - salt-sync
+    - worker

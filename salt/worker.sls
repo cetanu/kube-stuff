@@ -1,6 +1,3 @@
-include:
-  - k8s.common
-
 kubelet_defaults:
   file.managed:
     - name: /etc/default/kubelet
