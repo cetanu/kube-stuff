@@ -6,8 +6,8 @@ helm_repositories:
     url: https://kubernetes.github.io/cloud-provider-aws
   - name: aws-ebs-csi-driver
     url: https://kubernetes-sigs.github.io/aws-ebs-csi-driver
-  - name: wiremind
-    url: https://wiremind.github.io/wiremind-helm-charts
+  # - name: wiremind
+  #   url: https://wiremind.github.io/wiremind-helm-charts
 
 # Helm Templates to generate
 helm_templates:
@@ -30,10 +30,10 @@ helm_templates:
     namespace: kube-system
     output: k8s/manifests/aws-ebs-csi.yaml
 
-  - name: gateway-api-crds
-    chart: wiremind/gateway-api-crds
-    version: "1.5.1"
-    output: k8s/manifests/gateway-api-crds.yaml
+  # - name: gateway-api-crds
+  #   chart: wiremind/gateway-api-crds
+  #   version: "1.5.1"
+  #   output: k8s/manifests/gateway-api-crds.yaml
 
   - name: eg
     chart: oci://docker.io/envoyproxy/gateway-helm
@@ -64,10 +64,10 @@ deploy_steps:
     files:
       - k8s/manifests/namespaces.yaml
 
-  - action: apply
-    server_side: true
-    files:
-      - k8s/manifests/gateway-api-crds.yaml
+  # - action: apply
+  #   server_side: true
+  #   files:
+  #     - k8s/manifests/gateway-api-crds.yaml
 
   - action: apply
     files:
