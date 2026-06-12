@@ -80,49 +80,23 @@ jobs:
           aws ssm get-parameter --name "/kubeadm/kubeconfig" --query "Parameter.Value" --output text > ~/.kube/config
           chmod 600 ~/.kube/config
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml
+
       - name: Generate Helm and Addon Manifests
         run: |
-          mkdir -p k8s/manifests
-          
           # Fetch Pod CIDR from CloudFormation
           POD_CIDR=$(aws cloudformation describe-stacks --stack-name kube --query "Stacks[0].Parameters[?ParameterKey=='PodCIDR'].ParameterValue" --output text)
           if [ -z "$POD_CIDR" ]; then POD_CIDR="10.244.0.0/16"; fi
-          
-          # Flannel
-          curl -sL https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml | sed "s|10.244.0.0/16|${POD_CIDR}|g" > k8s/manifests/kube-flannel.yaml
-          
-          # Namespaces
-          echo -e "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: envoy-gateway-system" > k8s/manifests/namespaces.yaml
-          
-          # Add Helm repos
-          helm repo add aws-cloud-controller-manager https://kubernetes.github.io/cloud-provider-aws
-          helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
-          helm repo add wiremind https://wiremind.github.io/wiremind-helm-charts
-          helm repo update
-          
-          # Template AWS CCM
-          helm template aws-cloud-controller-manager aws-cloud-controller-manager/aws-cloud-controller-manager \
-            --namespace kube-system \
-            --set hostNetwork=true \
-            --set hostNetworking=true \
-            --set "args[0]=--v=2" \
-            --set "args[1]=--cloud-provider=aws" \
-            --set "args[2]=--cluster-name=kubernetes" \
-            --set "args[3]=--allocate-node-cidrs=true" \
-            --set "args[4]=--cluster-cidr=${POD_CIDR}" \
-            --set "args[5]=--configure-cloud-routes=false" > k8s/manifests/aws-ccm.yaml
-            
-          # Template EBS CSI
-          helm template aws-ebs-csi-driver aws-ebs-csi-driver/aws-ebs-csi-driver \
-            --namespace kube-system > k8s/manifests/aws-ebs-csi.yaml
-            
-          # Template Gateway API CRDs (pinned to v1.0.0 for Kubernetes 1.30 compatibility)
-          helm template gateway-api-crds wiremind/gateway-api-crds --version 1.0.0 > k8s/manifests/gateway-api-crds.yaml
-          
-          # Template Envoy Gateway
-          helm pull oci://docker.io/envoyproxy/gateway-helm --version v1.8.1 --untar
-          helm template eg ./gateway-helm \
-            --namespace envoy-gateway-system > k8s/manifests/envoy-gateway.yaml
+          export POD_CIDR
+          python3 deploy.py --generate
 
       - name: Upload Kubernetes Manifests
         uses: actions/upload-artifact@v4
@@ -132,21 +106,7 @@ jobs:
 
       - name: Deploy Manifests
         run: |
-          # 1. Apply namespaces and CRDs (using --server-side to prevent annotation size limit issues)
-          kubectl apply --server-side -f k8s/manifests/namespaces.yaml
-          kubectl apply --server-side -f k8s/manifests/gateway-api-crds.yaml
-          
-          # 2. Apply controllers (AWS CCM, EBS CSI, and Envoy Gateway which defines EnvoyProxy CRD)
-          kubectl apply -f k8s/manifests/aws-ccm.yaml
-          kubectl apply -f k8s/manifests/aws-ebs-csi.yaml
-          kubectl apply -f k8s/manifests/envoy-gateway.yaml
-          
-          # 3. Apply configurations and apps which depend on the controllers and CRDs
-          kubectl apply -f k8s/envoy-gateway-config.yml
-          kubectl apply -f k8s/storage_class.yml
-          kubectl apply -f k8s/valheim.yml
-
-          kubectl patch ds aws-cloud-controller-manager -n kube-system -p '{"spec":{"template":{"spec":{"hostNetwork":true}}}}' || true
+          python3 deploy.py --apply
 
       - name: Fetch and Dump Bootstrap Logs on Failure
         if: failure()
