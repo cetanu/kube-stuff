@@ -54,6 +54,10 @@ Resources:
                 Action:
                   - 'ec2:DescribeTags'
                 Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'cloudformation:SignalResource'
+                Resource: !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*'
         - PolicyName: 'AWSCloudProvider'
           PolicyDocument:
             Version: '2012-10-17'
@@ -238,6 +242,9 @@ Resources:
 
   ControlPlane0:
     Type: 'AWS::EC2::Instance'
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: 'PT15M'
     Properties:
       ImageId: 'ami-0a59248a6294cece2' # Ubuntu 22.04 LTS (us-east-1)
       InstanceType: 't3.medium' # Minimum spec for control plane
@@ -255,17 +262,22 @@ Resources:
         Fn::Base64: !Sub |
           #!/bin/bash
           set -eux
+          # ------------- Setup Signaling --------------
+          TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
+          INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
+          trap 'aws cloudformation signal-resource --stack-name ${AWS::StackName} --logical-resource-id ControlPlane0 --status FAILURE --unique-id $INSTANCE_ID --region ${AWS::Region} || true' ERR
+
           # ------------- Network check --------------
           until curl -s --connect-timeout 2 aws.amazon.com > /dev/null; do
             sleep 2
           done
 
-          echo "Waiting for apt/dpkg locks to release..."
-          while fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock /var/lib/dpkg/lock >/dev/null 2>&1 ; do
-              sleep 2
-          done
+          echo "Configuring apt locks and waiting for boot processes..."
+          echo 'DPkg::Lock::Timeout "300";' > /etc/apt/apt.conf.d/99timeout
+          echo 'Acquire::Lock::Timeout "300";' >> /etc/apt/apt.conf.d/99timeout
 
           # ------------- Bootstrap SaltStack --------------
+          mkdir -p /etc/apt/keyrings
           apt-get update && apt-get install -y curl git awscli jq
           curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor > /etc/apt/keyrings/salt-archive-keyring.pgp
           curl -o bootstrap-salt.sh -L https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh
@@ -275,8 +287,6 @@ Resources:
           git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
 
           # -------------- Set up Salt grains --------------
-          TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
-          INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
           AZ=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
           ROLE=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=Role" --region ${AWS::Region} --query "Tags[0].Value" --output text)
           echo "role: $ROLE" > /etc/salt/grains
@@ -290,10 +300,17 @@ Resources:
             aws ssm put-parameter --name "/kubeadm/salt-status" --value "$LOCAL" --type "String" --overwrite --region ${AWS::Region}
           fi
 
+          # -------------- Signal Success --------------
+          trap - ERR
+          aws cloudformation signal-resource --stack-name ${AWS::StackName} --logical-resource-id ControlPlane0 --status SUCCESS --unique-id $INSTANCE_ID --region ${AWS::Region}
+
   # --- WORKER NODE 0 ---
   Worker0:
     Type: 'AWS::EC2::Instance'
     DependsOn: ControlPlane0
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: 'PT15M'
     Properties:
       ImageId: 'ami-0a59248a6294cece2'
       InstanceType: 't3.medium'
@@ -311,17 +328,22 @@ Resources:
         Fn::Base64: !Sub |
           #!/bin/bash
           set -eux
+          # ------------- Setup Signaling --------------
+          TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
+          INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
+          trap 'aws cloudformation signal-resource --stack-name ${AWS::StackName} --logical-resource-id Worker0 --status FAILURE --unique-id $INSTANCE_ID --region ${AWS::Region} || true' ERR
+
           # ------------- Network check --------------
           until curl -s --connect-timeout 2 aws.amazon.com > /dev/null; do
             sleep 2
           done
 
-          echo "Waiting for apt/dpkg locks to release..."
-          while fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock /var/lib/dpkg/lock >/dev/null 2>&1 ; do
-              sleep 2
-          done
+          echo "Configuring apt locks and waiting for boot processes..."
+          echo 'DPkg::Lock::Timeout "300";' > /etc/apt/apt.conf.d/99timeout
+          echo 'Acquire::Lock::Timeout "300";' >> /etc/apt/apt.conf.d/99timeout
 
           # ------------- Bootstrap SaltStack --------------
+          mkdir -p /etc/apt/keyrings
           apt-get update && apt-get install -y curl git awscli jq
           curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor > /etc/apt/keyrings/salt-archive-keyring.pgp
           curl -o bootstrap-salt.sh -L https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh
@@ -331,8 +353,6 @@ Resources:
           git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
 
           # -------------- Set up Salt grains --------------
-          TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
-          INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
           AZ=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
           ROLE=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=Role" --region ${AWS::Region} --query "Tags[0].Value" --output text)
           echo "role: $ROLE" > /etc/salt/grains
@@ -341,10 +361,17 @@ Resources:
           # -------------- Initial Bootstrap Run --------------
           salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}', pod_cidr: '${PodCIDR}'}"
 
+          # -------------- Signal Success --------------
+          trap - ERR
+          aws cloudformation signal-resource --stack-name ${AWS::StackName} --logical-resource-id Worker0 --status SUCCESS --unique-id $INSTANCE_ID --region ${AWS::Region}
+
   # --- WORKER NODE 1 ---
   Worker1:
     Type: 'AWS::EC2::Instance'
     DependsOn: ControlPlane0
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: 'PT15M'
     Properties:
       ImageId: 'ami-0a59248a6294cece2'
       InstanceType: 't3.medium'
@@ -362,17 +389,22 @@ Resources:
         Fn::Base64: !Sub |
           #!/bin/bash
           set -eux
+          # ------------- Setup Signaling --------------
+          TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
+          INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
+          trap 'aws cloudformation signal-resource --stack-name ${AWS::StackName} --logical-resource-id Worker1 --status FAILURE --unique-id $INSTANCE_ID --region ${AWS::Region} || true' ERR
+
           # ------------- Network check --------------
           until curl -s --connect-timeout 2 aws.amazon.com > /dev/null; do
             sleep 2
           done
 
-          echo "Waiting for apt/dpkg locks to release..."
-          while fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock /var/lib/dpkg/lock >/dev/null 2>&1 ; do
-              sleep 2
-          done
+          echo "Configuring apt locks and waiting for boot processes..."
+          echo 'DPkg::Lock::Timeout "300";' > /etc/apt/apt.conf.d/99timeout
+          echo 'Acquire::Lock::Timeout "300";' >> /etc/apt/apt.conf.d/99timeout
 
           # ------------- Bootstrap SaltStack --------------
+          mkdir -p /etc/apt/keyrings
           apt-get update && apt-get install -y curl git awscli jq
           curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor > /etc/apt/keyrings/salt-archive-keyring.pgp
           curl -o bootstrap-salt.sh -L https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh
@@ -382,8 +414,6 @@ Resources:
           git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
 
           # -------------- Set up Salt grains --------------
-          TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
-          INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
           AZ=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
           ROLE=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=Role" --region ${AWS::Region} --query "Tags[0].Value" --output text)
           echo "role: $ROLE" > /etc/salt/grains
@@ -391,6 +421,10 @@ Resources:
 
           # -------------- Initial Bootstrap Run --------------
           salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}', pod_cidr: '${PodCIDR}'}"
+
+          # -------------- Signal Success --------------
+          trap - ERR
+          aws cloudformation signal-resource --stack-name ${AWS::StackName} --logical-resource-id Worker1 --status SUCCESS --unique-id $INSTANCE_ID --region ${AWS::Region}
 
 Outputs:
   GitHubActionsRunnerRoleARN:
