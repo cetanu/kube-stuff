@@ -116,17 +116,36 @@ jobs:
           helm template aws-ebs-csi-driver aws-ebs-csi-driver/aws-ebs-csi-driver \
             --namespace kube-system > k8s/manifests/aws-ebs-csi.yaml
             
-          # Template Gateway API CRDs
-          helm template gateway-api-crds wiremind/gateway-api-crds --version 1.5.1 > k8s/manifests/gateway-api-crds.yaml
+          # Template Gateway API CRDs (pinned to v1.0.0 for Kubernetes 1.30 compatibility)
+          helm template gateway-api-crds wiremind/gateway-api-crds --version 1.0.0 > k8s/manifests/gateway-api-crds.yaml
           
           # Template Envoy Gateway
           helm pull oci://docker.io/envoyproxy/gateway-helm --version v1.8.1 --untar
           helm template eg ./gateway-helm \
             --namespace envoy-gateway-system > k8s/manifests/envoy-gateway.yaml
 
+      - name: Upload Kubernetes Manifests
+        uses: actions/upload-artifact@v4
+        with:
+          name: kubernetes-manifests
+          path: k8s/
+
       - name: Deploy Manifests
         run: |
-          kubectl apply -f k8s/ --recursive --validate=false
+          # 1. Apply namespaces and CRDs (using --server-side to prevent annotation size limit issues)
+          kubectl apply --server-side -f k8s/manifests/namespaces.yaml
+          kubectl apply --server-side -f k8s/manifests/gateway-api-crds.yaml
+          
+          # 2. Apply controllers (AWS CCM, EBS CSI, and Envoy Gateway which defines EnvoyProxy CRD)
+          kubectl apply -f k8s/manifests/aws-ccm.yaml
+          kubectl apply -f k8s/manifests/aws-ebs-csi.yaml
+          kubectl apply -f k8s/manifests/envoy-gateway.yaml
+          
+          # 3. Apply configurations and apps which depend on the controllers and CRDs
+          kubectl apply -f k8s/envoy-gateway-config.yml
+          kubectl apply -f k8s/storage_class.yml
+          kubectl apply -f k8s/valheim.yml
+
           kubectl patch ds aws-cloud-controller-manager -n kube-system -p '{"spec":{"template":{"spec":{"hostNetwork":true}}}}' || true
 
       - name: Fetch and Dump Bootstrap Logs on Failure
