@@ -49,6 +49,7 @@ Resources:
                   - 'ec2:*'
                   - 'iam:*'
                   - 'ssm:*'
+                  - 's3:*'
                 Resource: '*'
         - PolicyName: 'SSMParameterAccess'
           PolicyDocument:
