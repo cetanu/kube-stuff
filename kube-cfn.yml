@@ -226,8 +226,22 @@ Resources:
           # ------------- Bootstrap SaltStack --------------
           mkdir -p /etc/apt/keyrings
           apt-get update && apt-get install -y curl git awscli jq
-          curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor > /etc/apt/keyrings/salt-archive-keyring.pgp
-          curl -o bootstrap-salt.sh -L https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh
+          
+          # Loop until the Salt GPG key is successfully downloaded and verified as a valid keyring
+          until
+            curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor > /etc/apt/keyrings/salt-archive-keyring.pgp && \
+            gpg --no-default-keyring --keyring /etc/apt/keyrings/salt-archive-keyring.pgp --list-keys >/dev/null 2>&1
+          do
+            echo "Waiting for valid Salt GPG key from Broadcom..."
+            sleep 5
+          done
+
+          # Loop until the bootstrap script is successfully downloaded
+          until curl -o bootstrap-salt.sh -fsSL https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh; do
+            echo "Waiting to download bootstrap-salt.sh..."
+            sleep 5
+          done
+
           sh bootstrap-salt.sh -P stable 3006.1
 
           rm -rf /srv/salt-repo
@@ -292,8 +306,22 @@ Resources:
           # ------------- Bootstrap SaltStack --------------
           mkdir -p /etc/apt/keyrings
           apt-get update && apt-get install -y curl git awscli jq
-          curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor > /etc/apt/keyrings/salt-archive-keyring.pgp
-          curl -o bootstrap-salt.sh -L https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh
+          
+          # Loop until the Salt GPG key is successfully downloaded and verified as a valid keyring
+          until
+            curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor > /etc/apt/keyrings/salt-archive-keyring.pgp && \
+            gpg --no-default-keyring --keyring /etc/apt/keyrings/salt-archive-keyring.pgp --list-keys >/dev/null 2>&1
+          do
+            echo "Waiting for valid Salt GPG key from Broadcom..."
+            sleep 5
+          done
+
+          # Loop until the bootstrap script is successfully downloaded
+          until curl -o bootstrap-salt.sh -fsSL https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh; do
+            echo "Waiting to download bootstrap-salt.sh..."
+            sleep 5
+          done
+
           sh bootstrap-salt.sh -P stable 3006.1
 
           rm -rf /srv/salt-repo
@@ -353,8 +381,22 @@ Resources:
           # ------------- Bootstrap SaltStack --------------
           mkdir -p /etc/apt/keyrings
           apt-get update && apt-get install -y curl git awscli jq
-          curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor > /etc/apt/keyrings/salt-archive-keyring.pgp
-          curl -o bootstrap-salt.sh -L https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh
+          
+          # Loop until the Salt GPG key is successfully downloaded and verified as a valid keyring
+          until
+            curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor > /etc/apt/keyrings/salt-archive-keyring.pgp && \
+            gpg --no-default-keyring --keyring /etc/apt/keyrings/salt-archive-keyring.pgp --list-keys >/dev/null 2>&1
+          do
+            echo "Waiting for valid Salt GPG key from Broadcom..."
+            sleep 5
+          done
+
+          # Loop until the bootstrap script is successfully downloaded
+          until curl -o bootstrap-salt.sh -fsSL https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh; do
+            echo "Waiting to download bootstrap-salt.sh..."
+            sleep 5
+          done
+
           sh bootstrap-salt.sh -P stable 3006.1
 
           rm -rf /srv/salt-repo
