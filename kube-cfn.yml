@@ -26,6 +26,11 @@ Parameters:
     Type: String
     Default: '10.244.0.0/16'
 
+  WorkerVolumeSize:
+    Description: 'Size of the root EBS volume for worker nodes in GB'
+    Type: Number
+    Default: 16
+
 Resources:
   # --- IAM CONFIGURATION FOR KUBEADM JOIN KEY EXCHANGE ---
   InstanceRole:
@@ -256,6 +261,11 @@ Resources:
       ResourceSignal:
         Timeout: 'PT15M'
     Properties:
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: !Ref WorkerVolumeSize
+            VolumeType: gp3
       ImageId: 'ami-0a59248a6294cece2'
       InstanceType: 't3.medium'
       KeyName: !Ref KeyPairName
@@ -314,6 +324,11 @@ Resources:
       ResourceSignal:
         Timeout: 'PT15M'
     Properties:
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: !Ref WorkerVolumeSize
+            VolumeType: gp3
       ImageId: 'ami-0a59248a6294cece2'
       InstanceType: 't3.medium'
       KeyName: !Ref KeyPairName
