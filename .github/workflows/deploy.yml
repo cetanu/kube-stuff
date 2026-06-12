@@ -180,9 +180,13 @@ jobs:
       - name: Close Firewall Port (Revoke Access)
         if: always()
         run: |
-          aws ec2 revoke-security-group-ingress \
-            --group-id ${{ env.AWS_SG_ID }} \
-            --protocol tcp \
-            --port 6443 \
-            --cidr ${{ steps.get-ip.outputs.ip }}/32
+          if [ -n "${{ env.AWS_SG_ID }}" ] && [ -n "${{ steps.get-ip.outputs.ip }}" ]; then
+            aws ec2 revoke-security-group-ingress \
+              --group-id ${{ env.AWS_SG_ID }} \
+              --protocol tcp \
+              --port 6443 \
+              --cidr ${{ steps.get-ip.outputs.ip }}/32 || true
+          else
+            echo "Security Group ID or Runner IP is empty; skipping port revocation."
+          fi
 
