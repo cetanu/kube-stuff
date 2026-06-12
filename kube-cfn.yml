@@ -96,67 +96,6 @@ Resources:
     Properties:
       Roles: [!Ref InstanceRole]
 
-  GithubOidcProvider:
-    Type: 'AWS::IAM::OIDCProvider'
-    Properties:
-      Url: 'https://token.actions.githubusercontent.com'
-      ClientIdList:
-        - 'sts.amazonaws.com'
-      ThumbprintList:
-        - '6938fd4d98bab03faadb97b34396831e3780aea1'
-
-  GitHubActionsRunnerRole:
-    Type: 'AWS::IAM::Role'
-    Properties:
-      RoleName: !Sub '${AWS::StackName}-github-actions-runner'
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Federated: !Ref GithubOidcProvider
-            Action: 'sts:AssumeRoleWithWebIdentity'
-            Condition:
-              StringEquals:
-                'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com'
-              StringLike:
-                'token.actions.githubusercontent.com:sub': !Sub 'repo:${GitHubOrg}/${GitHubRepo}:*'
-      Policies:
-        - PolicyName: 'CloudFormationDeployAccess'
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - 'cloudformation:*'
-                  - 'ec2:*'
-                  - 'iam:*'
-                  - 'ssm:*'
-                Resource: '*'
-        - PolicyName: 'SSMParameterAccess'
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - 'ssm:GetParameter'
-                Resource:
-                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/kubeadm/kubeconfig'
-                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/kubeadm/security-group-id'
-        - PolicyName: 'EC2SecurityGroupAccess'
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - 'ec2:AuthorizeSecurityGroupIngress'
-                  - 'ec2:RevokeSecurityGroupIngress'
-                Resource: !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${ClusterSG}'
-              - Effect: Allow
-                Action:
-                  - 'ec2:DescribeSecurityGroups'
-                Resource: '*'
-
   # --- NETWORKING ---
   VPC:
     Type: 'AWS::EC2::VPC'
@@ -426,7 +365,4 @@ Resources:
           trap - ERR
           aws cloudformation signal-resource --stack-name ${AWS::StackName} --logical-resource-id Worker1 --status SUCCESS --unique-id $INSTANCE_ID --region ${AWS::Region}
 
-Outputs:
-  GitHubActionsRunnerRoleARN:
-    Description: 'ARN of the IAM Role for GitHub Actions runner to assume'
-    Value: !GetAtt GitHubActionsRunnerRole.Arn
+
