@@ -219,31 +219,14 @@ Resources:
             sleep 2
           done
 
-          echo "Configuring apt locks and waiting for boot processes..."
-          echo 'DPkg::Lock::Timeout "300";' > /etc/apt/apt.conf.d/99timeout
-          echo 'Acquire::Lock::Timeout "300";' >> /etc/apt/apt.conf.d/99timeout
-
           # ------------- Bootstrap SaltStack --------------
-          mkdir -p /etc/apt/keyrings
           apt-get update && apt-get install -y curl git awscli jq
-          
-          # Loop until the Salt GPG key is successfully downloaded and verified as a valid keyring
-          until
-            curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor > /etc/apt/keyrings/salt-archive-keyring.pgp && \
-            gpg --no-default-keyring --keyring /etc/apt/keyrings/salt-archive-keyring.pgp --list-keys >/dev/null 2>&1
-          do
-            echo "Waiting for valid Salt GPG key from Broadcom..."
-            sleep 5
-          done
-
-          # Loop until the bootstrap script is successfully downloaded
-          until curl -o bootstrap-salt.sh -fsSL https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh; do
-            echo "Waiting to download bootstrap-salt.sh..."
-            sleep 5
-          done
-
+          mkdir -m 755 -p /etc/apt/keyrings
+          curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor | sudo tee /etc/apt/keyrings/salt-archive-keyring.pgp > /dev/null
+          curl -fsSL https://github.com/saltstack/salt-install-guide/releases/latest/download/salt.sources | sudo tee /etc/apt/sources.list.d/salt.sources
+          apt-get update
+          curl -o bootstrap-salt.sh -fsSL https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh; do
           sh bootstrap-salt.sh -U -P stable 3006.1
-
           rm -rf /srv/salt-repo
           git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
 
@@ -299,31 +282,14 @@ Resources:
             sleep 2
           done
 
-          echo "Configuring apt locks and waiting for boot processes..."
-          echo 'DPkg::Lock::Timeout "300";' > /etc/apt/apt.conf.d/99timeout
-          echo 'Acquire::Lock::Timeout "300";' >> /etc/apt/apt.conf.d/99timeout
-
           # ------------- Bootstrap SaltStack --------------
-          mkdir -p /etc/apt/keyrings
           apt-get update && apt-get install -y curl git awscli jq
-          
-          # Loop until the Salt GPG key is successfully downloaded and verified as a valid keyring
-          until
-            curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor > /etc/apt/keyrings/salt-archive-keyring.pgp && \
-            gpg --no-default-keyring --keyring /etc/apt/keyrings/salt-archive-keyring.pgp --list-keys >/dev/null 2>&1
-          do
-            echo "Waiting for valid Salt GPG key from Broadcom..."
-            sleep 5
-          done
-
-          # Loop until the bootstrap script is successfully downloaded
-          until curl -o bootstrap-salt.sh -fsSL https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh; do
-            echo "Waiting to download bootstrap-salt.sh..."
-            sleep 5
-          done
-
+          mkdir -m 755 -p /etc/apt/keyrings
+          curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor | sudo tee /etc/apt/keyrings/salt-archive-keyring.pgp > /dev/null
+          curl -fsSL https://github.com/saltstack/salt-install-guide/releases/latest/download/salt.sources | sudo tee /etc/apt/sources.list.d/salt.sources
+          apt-get update
+          curl -o bootstrap-salt.sh -fsSL https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh; do
           sh bootstrap-salt.sh -U -P stable 3006.1
-
           rm -rf /srv/salt-repo
           git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
 
@@ -374,31 +340,14 @@ Resources:
             sleep 2
           done
 
-          echo "Configuring apt locks and waiting for boot processes..."
-          echo 'DPkg::Lock::Timeout "300";' > /etc/apt/apt.conf.d/99timeout
-          echo 'Acquire::Lock::Timeout "300";' >> /etc/apt/apt.conf.d/99timeout
-
           # ------------- Bootstrap SaltStack --------------
-          mkdir -p /etc/apt/keyrings
           apt-get update && apt-get install -y curl git awscli jq
-          
-          # Loop until the Salt GPG key is successfully downloaded and verified as a valid keyring
-          until
-            curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor > /etc/apt/keyrings/salt-archive-keyring.pgp && \
-            gpg --no-default-keyring --keyring /etc/apt/keyrings/salt-archive-keyring.pgp --list-keys >/dev/null 2>&1
-          do
-            echo "Waiting for valid Salt GPG key from Broadcom..."
-            sleep 5
-          done
-
-          # Loop until the bootstrap script is successfully downloaded
-          until curl -o bootstrap-salt.sh -fsSL https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh; do
-            echo "Waiting to download bootstrap-salt.sh..."
-            sleep 5
-          done
-
+          mkdir -m 755 -p /etc/apt/keyrings
+          curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor | sudo tee /etc/apt/keyrings/salt-archive-keyring.pgp > /dev/null
+          curl -fsSL https://github.com/saltstack/salt-install-guide/releases/latest/download/salt.sources | sudo tee /etc/apt/sources.list.d/salt.sources
+          apt-get update
+          curl -o bootstrap-salt.sh -fsSL https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh; do
           sh bootstrap-salt.sh -U -P stable 3006.1
-
           rm -rf /srv/salt-repo
           git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
 
