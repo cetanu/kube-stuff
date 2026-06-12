@@ -129,6 +129,35 @@ jobs:
           kubectl apply -f k8s/ --recursive --validate=false
           kubectl patch ds aws-cloud-controller-manager -n kube-system -p '{"spec":{"template":{"spec":{"hostNetwork":true}}}}' || true
 
+      - name: Fetch and Dump Bootstrap Logs on Failure
+        if: failure()
+        run: |
+          echo "Pipeline step failed. Checking S3 for bootstrap/userdata logs..."
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          BUCKET_NAME="k8s-bootstrap-logs-${AWS_ACCOUNT_ID}-${{ env.AWS_REGION }}"
+          
+          # List files in the bucket
+          if aws s3 ls "s3://${BUCKET_NAME}/logs/" > /dev/null 2>&1; then
+            echo "Found logs in s3://${BUCKET_NAME}/logs/. Downloading..."
+            mkdir -p bootstrap-logs
+            aws s3 cp "s3://${BUCKET_NAME}/logs/" bootstrap-logs/ --recursive
+            
+            for logfile in bootstrap-logs/*; do
+              if [ -f "$logfile" ]; then
+                echo "========================================================"
+                echo "LOG FILE: $(basename "$logfile")"
+                echo "========================================================"
+                cat "$logfile"
+                echo "========================================================"
+              fi
+            done
+            
+            echo "Deleting logs from S3 bucket to clean up..."
+            aws s3 rm "s3://${BUCKET_NAME}/logs/" --recursive
+          else
+            echo "No bootstrap logs found in S3. The instances might have booted successfully or failed prior to CLI configuration."
+          fi
+
       - name: Close Firewall Port (Revoke Access)
         if: always()
         run: |
@@ -137,3 +166,4 @@ jobs:
             --protocol tcp \
             --port 6443 \
             --cidr ${{ steps.get-ip.outputs.ip }}/32
+
