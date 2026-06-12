@@ -149,7 +149,6 @@ Resources:
     Type: 'AWS::EC2::SubnetRouteTableAssociation'
     Properties: {SubnetId: !Ref Subnet, RouteTableId: !Ref RouteTable}
 
-  # --- SECURITY GROUPS ---
   ClusterSG:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
@@ -179,7 +178,6 @@ Resources:
       Value: !Ref ClusterSG
       Description: 'Security Group ID of the Kubernetes Cluster'
 
-  # --- CONTROL PLANE (MASTER) ---
   ControlPlaneEIP:
     Type: 'AWS::EC2::EIP'
     Properties:
@@ -253,131 +251,98 @@ Resources:
           trap - ERR
           aws cloudformation signal-resource --stack-name ${AWS::StackName} --logical-resource-id ControlPlane0 --status SUCCESS --unique-id $INSTANCE_ID --region ${AWS::Region}
 
-  # --- WORKER NODE 0 ---
-  Worker0:
-    Type: 'AWS::EC2::Instance'
+  WorkerLaunchTemplate:
+    Type: 'AWS::EC2::LaunchTemplate'
+    DependsOn: ControlPlane0
+    Properties:
+      LaunchTemplateName: !Sub '${AWS::StackName}-worker-launch-template'
+      LaunchTemplateData:
+        ImageId: 'ami-0a59248a6294cece2'
+        InstanceType: 't3.medium'
+        KeyName: !Ref KeyPairName
+        IamInstanceProfile:
+          Arn: !GetAtt InstanceProfile.Arn
+        SecurityGroupIds:
+          - !Ref ClusterSG
+        BlockDeviceMappings:
+          - DeviceName: /dev/sda1
+            Ebs:
+              VolumeSize: !Ref WorkerVolumeSize
+              VolumeType: gp3
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - {Key: Name, Value: 'worker-node'}
+              - {Key: 'kubernetes.io/cluster/kubernetes', Value: 'owned'}
+              - {Key: Role, Value: 'worker'}
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -eux
+            # ------------- Setup Signaling --------------
+            TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
+            INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
+            trap 'if command -v aws >/dev/null 2>&1; then aws s3 cp /var/log/cloud-init-output.log s3://k8s-bootstrap-logs-${AWS::AccountId}-${AWS::Region}/logs/$INSTANCE_ID-worker.log --region ${AWS::Region} || true; aws cloudformation signal-resource --stack-name ${AWS::StackName} --logical-resource-id WorkerASG --status FAILURE --unique-id $INSTANCE_ID --region ${AWS::Region} || true; fi' ERR
+
+            # ------------- Network check --------------
+            until curl -s --connect-timeout 2 aws.amazon.com > /dev/null; do
+              sleep 2
+            done
+
+            # ------------- Bootstrap SaltStack --------------
+            apt-get update && apt-get install -y curl git awscli jq
+            mkdir -m 755 -p /etc/apt/keyrings
+            curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor | sudo tee /etc/apt/keyrings/salt-archive-keyring.pgp > /dev/null
+            curl -fsSL https://github.com/saltstack/salt-install-guide/releases/latest/download/salt.sources | sudo tee /etc/apt/sources.list.d/salt.sources
+            apt-get update
+            curl -o bootstrap-salt.sh -fsSL https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh
+            sh bootstrap-salt.sh -U -P stable 3006.1
+            rm -rf /srv/salt-repo
+            git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
+
+            # -------------- Set up Salt grains --------------
+            AZ=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
+            echo "role: worker" > /etc/salt/grains
+            echo "provider_id: aws:///$AZ/$INSTANCE_ID" >> /etc/salt/grains
+
+            # -------------- Initial Bootstrap Run --------------
+            salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}', pod_cidr: '${PodCIDR}'}"
+
+            # -------------- Signal Success --------------
+            trap - ERR
+            aws cloudformation signal-resource --stack-name ${AWS::StackName} --logical-resource-id WorkerASG --status SUCCESS --unique-id $INSTANCE_ID --region ${AWS::Region}
+
+  WorkerASG:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
     DependsOn: ControlPlane0
     CreationPolicy:
       ResourceSignal:
         Timeout: 'PT15M'
+        Count: 2
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: 1
+        MaxBatchSize: 1
+        WaitOnResourceSignals: true
     Properties:
-      BlockDeviceMappings:
-        - DeviceName: /dev/sda1
-          Ebs:
-            VolumeSize: !Ref WorkerVolumeSize
-            VolumeType: gp3
-      ImageId: 'ami-0a59248a6294cece2'
-      InstanceType: 't3.medium'
-      KeyName: !Ref KeyPairName
-      IamInstanceProfile: !Ref InstanceProfile
-      SecurityGroupIds: [!Ref ClusterSG]
-      SubnetId: !Ref Subnet
-      PrivateIpAddress: '10.240.0.20'
-      Tags: [
-        {Key: Name, Value: 'worker-0'},
-        {Key: 'kubernetes.io/cluster/kubernetes', Value: 'owned'},
-        {Key: Role, Value: 'worker'}
-      ]
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          set -eux
-          # ------------- Setup Signaling --------------
-          TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
-          INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
-          trap 'if command -v aws >/dev/null 2>&1; then aws s3 cp /var/log/cloud-init-output.log s3://k8s-bootstrap-logs-${AWS::AccountId}-${AWS::Region}/logs/$INSTANCE_ID-worker0.log --region ${AWS::Region} || true; aws cloudformation signal-resource --stack-name ${AWS::StackName} --logical-resource-id Worker0 --status FAILURE --unique-id $INSTANCE_ID --region ${AWS::Region} || true; fi' ERR
-
-          # ------------- Network check --------------
-          until curl -s --connect-timeout 2 aws.amazon.com > /dev/null; do
-            sleep 2
-          done
-
-          # ------------- Bootstrap SaltStack --------------
-          apt-get update && apt-get install -y curl git awscli jq
-          mkdir -m 755 -p /etc/apt/keyrings
-          curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor | sudo tee /etc/apt/keyrings/salt-archive-keyring.pgp > /dev/null
-          curl -fsSL https://github.com/saltstack/salt-install-guide/releases/latest/download/salt.sources | sudo tee /etc/apt/sources.list.d/salt.sources
-          apt-get update
-          curl -o bootstrap-salt.sh -fsSL https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh
-          sh bootstrap-salt.sh -U -P stable 3006.1
-          rm -rf /srv/salt-repo
-          git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
-
-          # -------------- Set up Salt grains --------------
-          AZ=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
-          ROLE=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=Role" --region ${AWS::Region} --query "Tags[0].Value" --output text)
-          echo "role: $ROLE" > /etc/salt/grains
-          echo "provider_id: aws:///$AZ/$INSTANCE_ID" >> /etc/salt/grains
-
-          # -------------- Initial Bootstrap Run --------------
-          salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}', pod_cidr: '${PodCIDR}'}"
-
-          # -------------- Signal Success --------------
-          trap - ERR
-          aws cloudformation signal-resource --stack-name ${AWS::StackName} --logical-resource-id Worker0 --status SUCCESS --unique-id $INSTANCE_ID --region ${AWS::Region}
-
-  # --- WORKER NODE 1 ---
-  Worker1:
-    Type: 'AWS::EC2::Instance'
-    DependsOn: ControlPlane0
-    CreationPolicy:
-      ResourceSignal:
-        Timeout: 'PT15M'
-    Properties:
-      BlockDeviceMappings:
-        - DeviceName: /dev/sda1
-          Ebs:
-            VolumeSize: !Ref WorkerVolumeSize
-            VolumeType: gp3
-      ImageId: 'ami-0a59248a6294cece2'
-      InstanceType: 't3.medium'
-      KeyName: !Ref KeyPairName
-      IamInstanceProfile: !Ref InstanceProfile
-      SecurityGroupIds: [!Ref ClusterSG]
-      SubnetId: !Ref Subnet
-      PrivateIpAddress: '10.240.0.21'
-      Tags: [
-        {Key: Name, Value: 'worker-1'},
-        {Key: 'kubernetes.io/cluster/kubernetes', Value: 'owned'},
-        {Key: Role, Value: 'worker'}
-      ]
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          set -eux
-          # ------------- Setup Signaling --------------
-          TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
-          INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
-          trap 'if command -v aws >/dev/null 2>&1; then aws s3 cp /var/log/cloud-init-output.log s3://k8s-bootstrap-logs-${AWS::AccountId}-${AWS::Region}/logs/$INSTANCE_ID-worker1.log --region ${AWS::Region} || true; aws cloudformation signal-resource --stack-name ${AWS::StackName} --logical-resource-id Worker1 --status FAILURE --unique-id $INSTANCE_ID --region ${AWS::Region} || true; fi' ERR
-
-          # ------------- Network check --------------
-          until curl -s --connect-timeout 2 aws.amazon.com > /dev/null; do
-            sleep 2
-          done
-
-          # ------------- Bootstrap SaltStack --------------
-          apt-get update && apt-get install -y curl git awscli jq
-          mkdir -m 755 -p /etc/apt/keyrings
-          curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor | sudo tee /etc/apt/keyrings/salt-archive-keyring.pgp > /dev/null
-          curl -fsSL https://github.com/saltstack/salt-install-guide/releases/latest/download/salt.sources | sudo tee /etc/apt/sources.list.d/salt.sources
-          apt-get update
-          curl -o bootstrap-salt.sh -fsSL https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstrap-salt.sh
-          sh bootstrap-salt.sh -U -P stable 3006.1
-          rm -rf /srv/salt-repo
-          git clone https://github.com/${GitHubOrg}/${GitHubRepo}.git /srv/salt-repo
-
-          # -------------- Set up Salt grains --------------
-          AZ=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
-          ROLE=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=Role" --region ${AWS::Region} --query "Tags[0].Value" --output text)
-          echo "role: $ROLE" > /etc/salt/grains
-          echo "provider_id: aws:///$AZ/$INSTANCE_ID" >> /etc/salt/grains
-
-          # -------------- Initial Bootstrap Run --------------
-          salt-call --local --file-root=/srv/salt-repo/salt state.apply pillar="{aws_region: '${AWS::Region}', eip: '${ControlPlaneEIP}', pod_cidr: '${PodCIDR}'}"
-
-          # -------------- Signal Success --------------
-          trap - ERR
-          aws cloudformation signal-resource --stack-name ${AWS::StackName} --logical-resource-id Worker1 --status SUCCESS --unique-id $INSTANCE_ID --region ${AWS::Region}
+      VPCZoneIdentifier:
+        - !Ref Subnet
+      LaunchTemplate:
+        LaunchTemplateId: !Ref WorkerLaunchTemplate
+        Version: !GetAtt WorkerLaunchTemplate.LatestVersionNumber
+      MinSize: '2'
+      MaxSize: '4'
+      DesiredCapacity: '2'
+      Tags:
+        - Key: Name
+          Value: 'worker-node'
+          PropagateAtLaunch: true
+        - Key: 'kubernetes.io/cluster/kubernetes'
+          Value: 'owned'
+          PropagateAtLaunch: true
+        - Key: Role
+          Value: 'worker'
+          PropagateAtLaunch: true
 
   BootstrapLogBucket:
     Type: 'AWS::S3::Bucket'
