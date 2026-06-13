@@ -48,6 +48,7 @@ jobs:
             fi
           else
             echo "Backend URL is not an S3 URI ($BACKEND_URL). Skipping bucket upsert."
+            exit 1
           fi
 
       - name: Run Pulumi Up
