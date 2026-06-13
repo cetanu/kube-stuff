@@ -31,7 +31,7 @@ func main() {
 
 		// --- DYNAMIC AWS LOOKUPS ---
 		zones, err := aws.GetAvailabilityZones(ctx, &aws.GetAvailabilityZonesArgs{
-			State: pulumi.StringRef("available"),
+			State: new("available"),
 		})
 		if err != nil {
 			return err
@@ -41,12 +41,12 @@ func main() {
 		amiId := "ami-01af9407a2f0b0150"
 
 		// --- IAM ROLE CONFIGURATION ---
-		assumeRolePolicy, err := json.Marshal(map[string]interface{}{
+		assumeRolePolicy, err := json.Marshal(map[string]any{
 			"Version": "2012-10-17",
-			"Statement": []map[string]interface{}{
+			"Statement": []map[string]any{
 				{
 					"Effect": "Allow",
-					"Principal": map[string]interface{}{
+					"Principal": map[string]any{
 						"Service": "ec2.amazonaws.com",
 					},
 					"Action": "sts:AssumeRole",
@@ -276,6 +276,7 @@ func main() {
 			Type:        pulumi.String("String"),
 			Value:       clusterSG.ID(),
 			Description: pulumi.String("Security Group ID of the Kubernetes Cluster"),
+			Overwrite:   pulumi.Bool(true),
 		})
 		if err != nil {
 			return err
