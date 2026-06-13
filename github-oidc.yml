@@ -51,6 +51,7 @@ Resources:
                   - 'ssm:*'
                   - 's3:*'
                   - 'ec2:*'
+                  - 'elasticloadbalancing:*'
                 Resource: '*'
         - PolicyName: 'SSMParameterAccess'
           PolicyDocument:
