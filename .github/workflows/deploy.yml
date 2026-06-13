@@ -97,10 +97,10 @@ jobs:
       - name: Deploy Manifests
         run: |
           # 1. Apply bootstrap manifests (namespaces & CRDs)
-          kubectl apply -k k8s/bootstrap --enable-helm --server-side
+          kustomize build --enable-helm k8s/bootstrap | kubectl apply --server-side -f -
           
           # 2. Apply applications and configurations
-          kubectl apply -k k8s/apps --enable-helm
+          kustomize build --enable-helm k8s/apps | kubectl apply -f -
 
       - name: Fetch and Dump Bootstrap Logs on Failure
         if: failure()
