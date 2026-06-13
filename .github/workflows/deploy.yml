@@ -63,6 +63,7 @@ jobs:
           stack-name: default
           cloud-url: ${{ secrets.PULUMI_BACKEND_URL }}
           upsert: true
+          suppress-progress: true
         env:
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
           PULUMI_CONFIG: '{"kube-stuff:runnerIP":"${{ steps.ip.outputs.ip }}/32"}'
