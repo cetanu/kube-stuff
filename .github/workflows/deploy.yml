@@ -80,23 +80,13 @@ jobs:
           aws ssm get-parameter --name "/kubeadm/kubeconfig" --query "Parameter.Value" --output text > ~/.kube/config
           chmod 600 ~/.kube/config
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyyaml
-
-      - name: Generate Helm and Addon Manifests
+      - name: Generate Kustomize Configuration
         run: |
           # Fetch Pod CIDR from CloudFormation
           POD_CIDR=$(aws cloudformation describe-stacks --stack-name kube --query "Stacks[0].Parameters[?ParameterKey=='PodCIDR'].ParameterValue" --output text)
           if [ -z "$POD_CIDR" ]; then POD_CIDR="10.244.0.0/16"; fi
           export POD_CIDR
-          python3 deploy.py --generate
+          envsubst < k8s/apps/kustomization.tmpl.yaml > k8s/apps/kustomization.yaml
 
       - name: Upload Kubernetes Manifests
         uses: actions/upload-artifact@v4
@@ -106,7 +96,11 @@ jobs:
 
       - name: Deploy Manifests
         run: |
-          python3 deploy.py --apply
+          # 1. Apply bootstrap manifests (namespaces & CRDs)
+          kubectl apply -k k8s/bootstrap --enable-helm --server-side
+          
+          # 2. Apply applications and configurations
+          kubectl apply -k k8s/apps --enable-helm
 
       - name: Fetch and Dump Bootstrap Logs on Failure
         if: failure()

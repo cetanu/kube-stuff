@@ -1,0 +1,70 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+  - ../envoy-gateway-config.yml
+  - ../storage_class.yml
+  - ../valheim.yml
+
+helmCharts:
+  - name: aws-cloud-controller-manager
+    repo: https://kubernetes.github.io/cloud-provider-aws
+    releaseName: aws-cloud-controller-manager
+    namespace: kube-system
+    valuesInline:
+      hostNetwork: true
+      hostNetworking: true
+      args:
+        - "--v=2"
+        - "--cloud-provider=aws"
+        - "--cluster-name=kubernetes"
+        - "--allocate-node-cidrs=true"
+        - "--cluster-cidr=${POD_CIDR}"
+        - "--configure-cloud-routes=false"
+
+  - name: aws-ebs-csi-driver
+    repo: https://kubernetes-sigs.github.io/aws-ebs-csi-driver
+    releaseName: aws-ebs-csi-driver
+    namespace: kube-system
+
+  - name: gateway-helm
+    repo: oci://docker.io/envoyproxy
+    releaseName: eg
+    version: v1.8.1
+    namespace: envoy-gateway-system
+
+patches:
+  - target:
+      kind: ConfigMap
+      name: kube-flannel-cfg
+      namespace: kube-system
+    patch: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: kube-flannel-cfg
+        namespace: kube-system
+      data:
+        net-conf.json: |
+          {
+            "Network": "${POD_CIDR}",
+            "Backend": {
+              "Type": "vxlan"
+            }
+          }
+
+  - target:
+      kind: DaemonSet
+      name: aws-cloud-controller-manager
+      namespace: kube-system
+    patch: |
+      apiVersion: apps/v1
+      kind: DaemonSet
+      metadata:
+        name: aws-cloud-controller-manager
+        namespace: kube-system
+      spec:
+        template:
+          spec:
+            hostNetwork: true
