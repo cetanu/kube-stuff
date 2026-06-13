@@ -512,7 +512,7 @@ func main() {
 				},
 			},
 			UserData: workerUserDataBase64,
-		}, pulumi.DependsOn([]pulumi.Resource{controlPlane}))
+		}, pulumi.DependsOn([]pulumi.Resource{bootstrap}))
 		if err != nil {
 			return err
 		}
@@ -551,7 +551,7 @@ func main() {
 					PropagateAtLaunch: pulumi.Bool(true),
 				},
 			},
-		}, pulumi.DependsOn([]pulumi.Resource{controlPlane}))
+		}, pulumi.DependsOn([]pulumi.Resource{bootstrap}))
 		if err != nil {
 			return err
 		}
