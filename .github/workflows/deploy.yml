@@ -33,13 +33,30 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           audience: sts.amazonaws.com
 
+      - name: Upsert S3 State Bucket
+        run: |
+          BACKEND_URL="${{ secrets.PULUMI_BACKEND_URL }}"
+          if [[ "$BACKEND_URL" =~ ^s3://([^/]+) ]]; then
+            BUCKET_NAME="${BASH_REMATCH[1]}"
+            echo "Bucket name extracted: $BUCKET_NAME"
+            if aws s3api head-bucket --bucket "$BUCKET_NAME" 2>/dev/null; then
+              echo "Bucket $BUCKET_NAME already exists."
+            else
+              echo "Bucket $BUCKET_NAME does not exist. Creating..."
+              aws s3api create-bucket --bucket "$BUCKET_NAME" --region "${{ env.AWS_REGION }}" --create-bucket-configuration LocationConstraint="${{ env.AWS_REGION }}"
+              echo "Bucket $BUCKET_NAME created successfully."
+            fi
+          else
+            echo "Backend URL is not an S3 URI ($BACKEND_URL). Skipping bucket upsert."
+          fi
+
       - name: Run Pulumi Up
         id: pulumi
         uses: pulumi/actions@v4
         with:
           command: up
           stack-name: default
-          cloud-url: file://~
+          cloud-url: ${{ secrets.PULUMI_BACKEND_URL }}
           upsert: true
         env:
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}

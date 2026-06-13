@@ -35,6 +35,6 @@ jobs:
         with:
           command: destroy
           stack-name: default
-          cloud-url: file://~
+          cloud-url: ${{ secrets.PULUMI_BACKEND_URL }}
         env:
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
