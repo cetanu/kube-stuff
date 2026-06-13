@@ -18,15 +18,6 @@ func main() {
 		// --- CONFIGURATION / PARAMETERS ---
 		cfg := config.New(ctx, "")
 
-		keyPairName := cfg.Get("keyPairName")
-		if keyPairName == "" {
-			keyPairName = "kubeworld-except-it-works-this-time"
-		}
-
-		yourIP := cfg.Get("yourIP")
-		if yourIP == "" {
-			yourIP = "0.0.0.0/0"
-		}
 
 		podCidr := cfg.Get("podCidr")
 		if podCidr == "" {
@@ -229,15 +220,7 @@ func main() {
 						pulumi.String(podCidr),
 					},
 				},
-				// External management access (SSH)
-				&ec2.SecurityGroupIngressArgs{
-					Protocol: pulumi.String("tcp"),
-					FromPort: pulumi.Int(22),
-					ToPort:   pulumi.Int(22),
-					CidrBlocks: pulumi.StringArray{
-						pulumi.String(yourIP),
-					},
-				},
+
 				// Inbound Kubernetes API from the Load Balancer Security Group
 				&ec2.SecurityGroupIngressArgs{
 					Protocol: pulumi.String("tcp"),
@@ -311,7 +294,7 @@ func main() {
 		controlPlane, err := ec2.NewInstance(ctx, "control-plane-0", &ec2.InstanceArgs{
 			Ami:                 pulumi.String(amiId),
 			InstanceType:        pulumi.String("t3.medium"),
-			KeyName:             pulumi.String(keyPairName),
+
 			IamInstanceProfile:  instanceProfile.Name,
 			VpcSecurityGroupIds: pulumi.StringArray{clusterSG.ID()},
 			SubnetId:            subnet.ID(),
@@ -390,7 +373,7 @@ func main() {
 			Name:         pulumi.String(ctx.Stack() + "-worker-launch-template"),
 			ImageId:      pulumi.String(amiId),
 			InstanceType: pulumi.String("t3.medium"),
-			KeyName:      pulumi.String(keyPairName),
+
 			IamInstanceProfile: &ec2.LaunchTemplateIamInstanceProfileArgs{
 				Arn: instanceProfile.Arn,
 			},
