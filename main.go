@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"os"
 
 	"github.com/pulumi/pulumi-aws/sdk/v6/go/aws"
 	"github.com/pulumi/pulumi-aws/sdk/v6/go/aws/autoscaling"
@@ -371,7 +372,10 @@ func main() {
 		// --- DYNAMIC RUNNER SECURITY GROUP RULES ---
 		// We dynamically open port 50000 on the control plane and port 6443 on the load balancer
 		// for the IP address of the runner executing Pulumi (if provided via config).
-		runnerIP := cfg.Get("runnerIP")
+		runnerIP := os.Getenv("RUNNER_IP")
+		if runnerIP == "" {
+			runnerIP = cfg.Get("runnerIP")
+		}
 		var bootstrapDeps []pulumi.Resource
 		bootstrapDeps = append(bootstrapDeps, controlPlane, eipAssociation)
 

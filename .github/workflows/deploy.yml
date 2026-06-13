@@ -66,7 +66,7 @@ jobs:
           suppress-progress: true
         env:
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
-          PULUMI_CONFIG: '{"kube-stuff:runnerIP":"${{ steps.ip.outputs.ip }}/32"}'
+          RUNNER_IP: ${{ steps.ip.outputs.ip }}/32
 
       - name: Save Kubeconfig and Talosconfig
         run: |
