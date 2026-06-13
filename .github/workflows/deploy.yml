@@ -1,4 +1,4 @@
-name: Deploy to Kubernetes Control Plane
+name: Provision stack
 
 on:
   push:
