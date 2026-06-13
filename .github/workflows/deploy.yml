@@ -34,6 +34,7 @@ jobs:
           audience: sts.amazonaws.com
 
       - name: Run Pulumi Up
+        id: pulumi
         uses: pulumi/actions@v4
         with:
           command: up
@@ -42,3 +43,30 @@ jobs:
           upsert: true
         env:
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+
+      - name: Get Runner IP
+        id: ip
+        run: echo "ip=$(curl -s https://checkip.amazonaws.com)" >> $GITHUB_OUTPUT
+
+      - name: Open Security Group for Runner
+        run: |
+          aws ec2 authorize-security-group-ingress \
+            --group-id ${{ steps.pulumi.outputs.apiServerLbSgId }} \
+            --protocol tcp \
+            --port 6443 \
+            --cidr ${{ steps.ip.outputs.ip }}/32
+
+      - name: Cluster Deployment Placeholder
+        run: |
+          echo "Ready to configure Talos Linux cluster..."
+          echo "Kubernetes API Server is available at: ${{ steps.pulumi.outputs.apiServerLbDns }}:6443"
+          # Add talosctl bootstrap / kubectl / ArgoCD commands here!
+
+      - name: Close Security Group for Runner
+        if: always()
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id ${{ steps.pulumi.outputs.apiServerLbSgId }} \
+            --protocol tcp \
+            --port 6443 \
+            --cidr ${{ steps.ip.outputs.ip }}/32

@@ -7,6 +7,7 @@ import (
 	"github.com/pulumi/pulumi-aws/sdk/v6/go/aws/autoscaling"
 	"github.com/pulumi/pulumi-aws/sdk/v6/go/aws/ec2"
 	"github.com/pulumi/pulumi-aws/sdk/v6/go/aws/iam"
+	"github.com/pulumi/pulumi-aws/sdk/v6/go/aws/lb"
 	"github.com/pulumi/pulumi-aws/sdk/v6/go/aws/ssm"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
@@ -22,7 +23,6 @@ func main() {
 			keyPairName = "kubeworld-except-it-works-this-time"
 		}
 
-		// Optional parameters with defaults matching cfn.yml
 		yourIP := cfg.Get("yourIP")
 		if yourIP == "" {
 			yourIP = "0.0.0.0/0"
@@ -39,10 +39,8 @@ func main() {
 		}
 
 		// --- DYNAMIC AWS LOOKUPS ---
-
-		// Fetch availability zones in the current region
 		zones, err := aws.GetAvailabilityZones(ctx, &aws.GetAvailabilityZonesArgs{
-			State: new("available"),
+			State: pulumi.StringRef("available"),
 		})
 		if err != nil {
 			return err
@@ -52,12 +50,12 @@ func main() {
 		amiId := "ami-01af9407a2f0b0150"
 
 		// --- IAM ROLE CONFIGURATION ---
-		assumeRolePolicy, err := json.Marshal(map[string]any{
+		assumeRolePolicy, err := json.Marshal(map[string]interface{}{
 			"Version": "2012-10-17",
-			"Statement": []map[string]any{
+			"Statement": []map[string]interface{}{
 				{
 					"Effect": "Allow",
-					"Principal": map[string]any{
+					"Principal": map[string]interface{}{
 						"Service": "ec2.amazonaws.com",
 					},
 					"Action": "sts:AssumeRole",
@@ -191,6 +189,24 @@ func main() {
 			return err
 		}
 
+		// Security Group for Kubernetes API Server Load Balancer
+		apiServerLBSG, err := ec2.NewSecurityGroup(ctx, "api-server-lb-sg", &ec2.SecurityGroupArgs{
+			VpcId:       vpc.ID(),
+			Description: pulumi.String("Security Group for Kubernetes API Server Load Balancer"),
+			// No ingress rules by default - will be opened ad-hoc by GitHub Action runner
+			Egress: ec2.SecurityGroupEgressArray{
+				&ec2.SecurityGroupEgressArgs{
+					Protocol:   pulumi.String("-1"),
+					FromPort:   pulumi.Int(0),
+					ToPort:     pulumi.Int(0),
+					CidrBlocks: pulumi.StringArray{pulumi.String("0.0.0.0/0")},
+				},
+			},
+		})
+		if err != nil {
+			return err
+		}
+
 		clusterSG, err := ec2.NewSecurityGroup(ctx, "cluster-sg", &ec2.SecurityGroupArgs{
 			VpcId:       vpc.ID(),
 			Description: pulumi.String("Allow all internal traffic, plus external SSH and Kubernetes API"),
@@ -213,13 +229,22 @@ func main() {
 						pulumi.String(podCidr),
 					},
 				},
-				// External management access
+				// External management access (SSH)
 				&ec2.SecurityGroupIngressArgs{
 					Protocol: pulumi.String("tcp"),
 					FromPort: pulumi.Int(22),
 					ToPort:   pulumi.Int(22),
 					CidrBlocks: pulumi.StringArray{
 						pulumi.String(yourIP),
+					},
+				},
+				// Inbound Kubernetes API from the Load Balancer Security Group
+				&ec2.SecurityGroupIngressArgs{
+					Protocol: pulumi.String("tcp"),
+					FromPort: pulumi.Int(6443),
+					ToPort:   pulumi.Int(6443),
+					SecurityGroups: pulumi.StringArray{
+						apiServerLBSG.ID(),
 					},
 				},
 				// Valheim standard UDP ports
@@ -309,6 +334,58 @@ func main() {
 			return err
 		}
 
+		// --- KUBERNETES API SERVER LOAD BALANCER ---
+		apiServerLB, err := lb.NewLoadBalancer(ctx, "api-server-lb", &lb.LoadBalancerArgs{
+			LoadBalancerType: pulumi.String("network"),
+			Subnets:          pulumi.StringArray{subnet.ID()},
+			SecurityGroups:   pulumi.StringArray{apiServerLBSG.ID()},
+			Internal:         pulumi.Bool(false),
+		})
+		if err != nil {
+			return err
+		}
+
+		apiServerTG, err := lb.NewTargetGroup(ctx, "api-server-tg", &lb.TargetGroupArgs{
+			Port:       pulumi.Int(6443),
+			Protocol:   pulumi.String("TCP"),
+			VpcId:      vpc.ID(),
+			TargetType: pulumi.String("instance"),
+			HealthCheck: &lb.TargetGroupHealthCheckArgs{
+				Protocol:           pulumi.String("TCP"),
+				Port:               pulumi.String("6443"),
+				Interval:           pulumi.Int(30),
+				HealthyThreshold:   pulumi.Int(3),
+				UnhealthyThreshold: pulumi.Int(3),
+			},
+		})
+		if err != nil {
+			return err
+		}
+
+		_, err = lb.NewTargetGroupAttachment(ctx, "api-server-tg-attachment", &lb.TargetGroupAttachmentArgs{
+			TargetGroupArn: apiServerTG.Arn,
+			TargetId:       controlPlane.ID(),
+			Port:           pulumi.Int(6443),
+		})
+		if err != nil {
+			return err
+		}
+
+		_, err = lb.NewListener(ctx, "api-server-listener", &lb.ListenerArgs{
+			LoadBalancerArn: apiServerLB.Arn,
+			Port:            pulumi.Int(6443),
+			Protocol:        pulumi.String("TCP"),
+			DefaultActions: lb.ListenerDefaultActionArray{
+				&lb.ListenerDefaultActionArgs{
+					Type:           pulumi.String("forward"),
+					TargetGroupArn: apiServerTG.Arn,
+				},
+			},
+		})
+		if err != nil {
+			return err
+		}
+
 		workerLaunchTemplate, err := ec2.NewLaunchTemplate(ctx, "worker-launch-template", &ec2.LaunchTemplateArgs{
 			Name:         pulumi.String(ctx.Stack() + "-worker-launch-template"),
 			ImageId:      pulumi.String(amiId),
@@ -386,6 +463,8 @@ func main() {
 		ctx.Export("subnetId", subnet.ID())
 		ctx.Export("controlPlanePublicIp", controlPlaneEip.PublicIp)
 		ctx.Export("securityGroupId", clusterSG.ID())
+		ctx.Export("apiServerLbDns", apiServerLB.DnsName)
+		ctx.Export("apiServerLbSgId", apiServerLBSG.ID())
 
 		return nil
 	})
