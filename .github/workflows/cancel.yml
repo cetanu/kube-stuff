@@ -1,0 +1,42 @@
+name: Cancel Pulumi Stack Lock
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-southeast-2
+  AWS_ROLE_TO_ASSUME: arn:aws:iam::626210706774:role/kube-github-actions-runner
+
+jobs:
+  cancel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v6.2.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+
+      - name: Run Pulumi Cancel
+        id: pulumi
+        uses: pulumi/actions@v4
+        with:
+          command: cancel
+          stack-name: default
+          cloud-url: ${{ secrets.PULUMI_BACKEND_URL }}
+        env:
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+          PULUMI_CONFIG: '{"kube-stuff:runnerIP":"${{ steps.ip.outputs.ip }}/32"}'
