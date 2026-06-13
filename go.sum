@@ -191,6 +191,8 @@ github.com/pulumi/pulumi-aws/sdk/v6 v6.83.4 h1:rI5FtYK0SY5VKPIRqwCqpnLJ7G7BeD4CA
 github.com/pulumi/pulumi-aws/sdk/v6 v6.83.4/go.mod h1:Ndpr97C9U/oghSpYch31qh2qxFGaODIw6FH2h8YfEVM=
 github.com/pulumi/pulumi/sdk/v3 v3.246.0 h1:n7aigZmbyzVNz6mWpcA8f+0SMHRcBWZn/OlYWylRNvY=
 github.com/pulumi/pulumi/sdk/v3 v3.246.0/go.mod h1:BPWWuYPXcPH5YbXGoyy9Rrfa+evrh6IdM51AjDhcDpM=
+github.com/pulumiverse/pulumi-talos/sdk v0.8.0 h1:gMZFDbDk4QNVjRGfi1yzsx19dyq5lP0PfcSL2Sj/Taw=
+github.com/pulumiverse/pulumi-talos/sdk v0.8.0/go.mod h1:W2F+VsmzflAeE1wFhrhEDYjaRT1hNjyA2OF894kbUFY=
 github.com/rivo/uniseg v0.4.7 h1:WUdvkW8uEhrYfLC4ZzdpI2ztxP1I582+49Oc5Mq64VQ=
 github.com/rivo/uniseg v0.4.7/go.mod h1:FN3SvrM+Zdj16jyLfmOkMNblXMcoc8DfTHruCPUcx88=
 github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=
