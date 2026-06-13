@@ -14,10 +14,14 @@
 
 ## Phase 3 - Today's Stream
 If we can do it all:
-[ ] Use Talos Linux for the cluster OS
-[ ] Use Pulumi to define the infra
+[x] Use Pulumi to define the infra
+[x] Use Talos Linux for the cluster OS
+[ ] Bootstrap Talos by hitting the kube API
 [ ] Set up ArgoCD for Kube GitOps
 [ ] Use Cilium for the network driver
 [ ] Set up a secrets operator
-[ ] Delete the existing salt/cloudformation code
+[ ] Probably get AWS CCM set up so that the control-plane can make EBS volumes
+[ ] Create Valheim game server pod
+[ ] Set up Envoy-Gateway
+[ ] Get UDP Routes to access the Valheim game server
 
