@@ -17,8 +17,10 @@ func main() {
 		// --- CONFIGURATION / PARAMETERS ---
 		cfg := config.New(ctx, "")
 
-		// KeyPairName is required (no default in original CFN template)
-		keyPairName := cfg.Require("keyPairName")
+		keyPairName := cfg.Get("keyPairName")
+		if keyPairName == "" {
+			keyPairName = "kubeworld-except-it-works-this-time"
+		}
 
 		// Optional parameters with defaults matching cfn.yml
 		yourIP := cfg.Get("yourIP")
