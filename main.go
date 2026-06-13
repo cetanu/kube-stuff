@@ -360,7 +360,7 @@ func main() {
 			return err
 		}
 
-		_, err = ec2.NewEipAssociation(ctx, "control-plane-eip-association", &ec2.EipAssociationArgs{
+		eipAssociation, err := ec2.NewEipAssociation(ctx, "control-plane-eip-association", &ec2.EipAssociationArgs{
 			InstanceId:   controlPlane.ID(),
 			AllocationId: controlPlaneEip.AllocationId,
 		})
@@ -373,7 +373,7 @@ func main() {
 		// for the IP address of the runner executing Pulumi (if provided via config).
 		runnerIP := cfg.Get("runnerIP")
 		var bootstrapDeps []pulumi.Resource
-		bootstrapDeps = append(bootstrapDeps, controlPlane)
+		bootstrapDeps = append(bootstrapDeps, controlPlane, eipAssociation)
 
 		if runnerIP != "" {
 			runnerLbRule, err := ec2.NewSecurityGroupRule(ctx, "runner-to-lb-api", &ec2.SecurityGroupRuleArgs{
