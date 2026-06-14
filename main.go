@@ -452,8 +452,34 @@ func main() {
 			return err
 		}
 
+		vpcLbRule, err := ec2.NewSecurityGroupRule(ctx, "vpc-to-lb-api", &ec2.SecurityGroupRuleArgs{
+			Type:            pulumi.String("ingress"),
+			FromPort:        pulumi.Int(6443),
+			ToPort:          pulumi.Int(6443),
+			Protocol:        pulumi.String("tcp"),
+			CidrBlocks:      pulumi.StringArray{pulumi.String("10.240.0.0/16")},
+			SecurityGroupId: apiServerLBSG.ID(),
+		})
+		if err != nil {
+			return err
+		}
+
+		vpcLbTalosRule, err := ec2.NewSecurityGroupRule(ctx, "vpc-to-lb-talos", &ec2.SecurityGroupRuleArgs{
+			Type:            pulumi.String("ingress"),
+			FromPort:        pulumi.Int(50000),
+			ToPort:          pulumi.Int(50000),
+			Protocol:        pulumi.String("tcp"),
+			CidrBlocks:      pulumi.StringArray{pulumi.String("10.240.0.0/16")},
+			SecurityGroupId: apiServerLBSG.ID(),
+		})
+		if err != nil {
+			return err
+		}
+
+
 		var bootstrapDeps []pulumi.Resource
-		bootstrapDeps = append(bootstrapDeps, controlPlane, runnerLbRule, runnerLbTalosRule)
+		bootstrapDeps = append(bootstrapDeps, controlPlane, runnerLbRule, runnerLbTalosRule, vpcLbRule, vpcLbTalosRule)
+
 
 		// --- TALOS CLUSTER BOOTSTRAP ---
 		bootstrap, err := machine.NewBootstrap(ctx, "talos-bootstrap", &machine.BootstrapArgs{
