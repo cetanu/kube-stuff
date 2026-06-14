@@ -423,7 +423,7 @@ func main() {
 		// Fetch the admin kubeconfig from the bootstrapped control plane node.
 		kubeconfig, err := cluster.NewKubeconfig(ctx, "talos-kubeconfig", &cluster.KubeconfigArgs{
 			Node:     controlPlaneEip.PublicIp,
-			Endpoint: apiServerLB.DnsName,
+			Endpoint: controlPlaneEip.PublicIp,
 			ClientConfiguration: cluster.KubeconfigClientConfigurationArgs{
 				CaCertificate:     talosSecrets.ClientConfiguration.CaCertificate(),
 				ClientCertificate: talosSecrets.ClientConfiguration.ClientCertificate(),
