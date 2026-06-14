@@ -587,5 +587,5 @@ func getPublicIP() (string, error) {
 		return "", err
 	}
 
-	return strings.TrimSpace(string(body)), nil
+	return fmt.Sprintf("%s/32", strings.TrimSpace(string(body))), nil
 }
