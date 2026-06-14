@@ -245,6 +245,15 @@ func main() {
 						apiServerLBSG.ID(),
 					},
 				},
+				// Inbound Talos API from the Load Balancer Security Group
+				&ec2.SecurityGroupIngressArgs{
+					Protocol: pulumi.String("tcp"),
+					FromPort: pulumi.Int(50000),
+					ToPort:   pulumi.Int(50000),
+					SecurityGroups: pulumi.StringArray{
+						apiServerLBSG.ID(),
+					},
+				},
 				// Valheim standard UDP ports
 				&ec2.SecurityGroupIngressArgs{
 					Protocol: pulumi.String("udp"),
@@ -296,16 +305,6 @@ func main() {
 			return err
 		}
 
-		controlPlaneEip, err := ec2.NewEip(ctx, "control-plane-eip", &ec2.EipArgs{
-			Domain: pulumi.String("vpc"),
-			Tags: pulumi.StringMap{
-				"Name": pulumi.String("control-plane-eip"),
-			},
-		})
-		if err != nil {
-			return err
-		}
-
 		// --- KUBERNETES API SERVER LOAD BALANCER ---
 		apiServerLB, err := lb.NewLoadBalancer(ctx, "api-server-lb", &lb.LoadBalancerArgs{
 			LoadBalancerType: pulumi.String("network"),
@@ -332,6 +331,11 @@ func main() {
 			ClusterEndpoint: pulumi.Sprintf("https://%s:6443", apiServerLB.DnsName),
 			MachineType:     pulumi.String("controlplane"),
 			MachineSecrets:  talosSecrets.MachineSecrets,
+			ConfigPatches: pulumi.StringArray{
+				apiServerLB.DnsName.ApplyT(func(dns string) string {
+					return fmt.Sprintf("machine:\n  certSANs:\n    - %s\n", dns)
+				}).(pulumi.StringOutput),
+			},
 		})
 
 		workerConfigResult := machine.GetConfigurationOutput(ctx, machine.GetConfigurationOutputArgs{
@@ -341,112 +345,47 @@ func main() {
 			MachineSecrets:  talosSecrets.MachineSecrets,
 		})
 
+		controlPlaneUserDataBase64 := controlPlaneConfigResult.MachineConfiguration().ApplyT(func(s string) string {
+			return base64.StdEncoding.EncodeToString([]byte(s))
+		}).(pulumi.StringOutput)
+
 		workerUserDataBase64 := workerConfigResult.MachineConfiguration().ApplyT(func(s string) string {
 			return base64.StdEncoding.EncodeToString([]byte(s))
 		}).(pulumi.StringOutput)
 
-		// Create Control Plane Node with UserData
-		controlPlane, err := ec2.NewInstance(ctx, "control-plane-0", &ec2.InstanceArgs{
-			Ami:                 pulumi.String(amiId),
-			InstanceType:        pulumi.String("t3.medium"),
-			IamInstanceProfile:  instanceProfile.Name,
+		// Create Control Plane Launch Template and Auto Scaling Group
+		controlPlaneLaunchTemplate, err := ec2.NewLaunchTemplate(ctx, "control-plane-launch-template", &ec2.LaunchTemplateArgs{
+			Name:         pulumi.String(ctx.Stack() + "-control-plane-launch-template"),
+			ImageId:      pulumi.String(amiId),
+			InstanceType: pulumi.String("t3.medium"),
+			IamInstanceProfile: &ec2.LaunchTemplateIamInstanceProfileArgs{
+				Arn: instanceProfile.Arn,
+			},
 			VpcSecurityGroupIds: pulumi.StringArray{clusterSG.ID()},
-			SubnetId:            subnet.ID(),
-			PrivateIp:           pulumi.String("10.240.0.11"),
-			Tags: pulumi.StringMap{
-				"Name":                             pulumi.String("control-plane-0"),
-				"kubernetes.io/cluster/kubernetes": pulumi.String("owned"),
-				"Role":                             pulumi.String("controlplane"),
+			BlockDeviceMappings: ec2.LaunchTemplateBlockDeviceMappingArray{
+				&ec2.LaunchTemplateBlockDeviceMappingArgs{
+					DeviceName: pulumi.String("/dev/sda1"),
+					Ebs: &ec2.LaunchTemplateBlockDeviceMappingEbsArgs{
+						VolumeSize: pulumi.Int(16),
+						VolumeType: pulumi.String("gp3"),
+					},
+				},
 			},
-			UserData: controlPlaneConfigResult.MachineConfiguration(),
-		})
-		if err != nil {
-			return err
-		}
-
-		eipAssociation, err := ec2.NewEipAssociation(ctx, "control-plane-eip-association", &ec2.EipAssociationArgs{
-			InstanceId:   controlPlane.ID(),
-			AllocationId: controlPlaneEip.AllocationId,
-		})
-		if err != nil {
-			return err
-		}
-
-		// --- DYNAMIC RUNNER SECURITY GROUP RULES ---
-		// We dynamically open port 50000 on the control plane and port 6443 on the load balancer
-		// for the IP address of the runner executing Pulumi (if provided via config).
-		runnerIP, err := getPublicIP()
-		if err != nil {
-			return fmt.Errorf("runnerIP is blank and failed to fetch from checkip.amazonaws.com: %w", err)
-		}
-		var bootstrapDeps []pulumi.Resource
-		bootstrapDeps = append(bootstrapDeps, controlPlane, eipAssociation)
-
-		runnerLbRule, err := ec2.NewSecurityGroupRule(ctx, "runner-to-lb-api", &ec2.SecurityGroupRuleArgs{
-			Type:            pulumi.String("ingress"),
-			FromPort:        pulumi.Int(6443),
-			ToPort:          pulumi.Int(6443),
-			Protocol:        pulumi.String("tcp"),
-			CidrBlocks:      pulumi.StringArray{pulumi.String(runnerIP)},
-			SecurityGroupId: apiServerLBSG.ID(),
-		})
-		if err != nil {
-			return err
-		}
-		bootstrapDeps = append(bootstrapDeps, runnerLbRule)
-
-		runnerNodeRule, err := ec2.NewSecurityGroupRule(ctx, "runner-to-node-talos", &ec2.SecurityGroupRuleArgs{
-			Type:            pulumi.String("ingress"),
-			FromPort:        pulumi.Int(50000),
-			ToPort:          pulumi.Int(50000),
-			Protocol:        pulumi.String("tcp"),
-			CidrBlocks:      pulumi.StringArray{pulumi.String(runnerIP)},
-			SecurityGroupId: clusterSG.ID(),
-		})
-		if err != nil {
-			return err
-		}
-		bootstrapDeps = append(bootstrapDeps, runnerNodeRule)
-
-		// --- TALOS CLUSTER BOOTSTRAP ---
-		// Trigger the one-time Talos bootstrap command against the control plane node.
-		// Pulumi tracks this resource in state to ensure it is only executed once.
-		bootstrap, err := machine.NewBootstrap(ctx, "talos-bootstrap", &machine.BootstrapArgs{
-			Node:                pulumi.String("10.240.0.11"), // Node private IP (static)
-			Endpoint:            controlPlaneEip.PublicIp,    // Target node public EIP
-			ClientConfiguration: talosSecrets.ClientConfiguration.ToClientConfigurationPtrOutput(),
-		}, pulumi.DependsOn(bootstrapDeps))
-		if err != nil {
-			return err
-		}
-
-		// --- RETRIEVE KUBECONFIG ---
-		// Fetch the admin kubeconfig from the bootstrapped control plane node.
-		kubeconfig, err := cluster.NewKubeconfig(ctx, "talos-kubeconfig", &cluster.KubeconfigArgs{
-			Node:     controlPlaneEip.PublicIp,
-			Endpoint: controlPlaneEip.PublicIp,
-			ClientConfiguration: cluster.KubeconfigClientConfigurationArgs{
-				CaCertificate:     talosSecrets.ClientConfiguration.CaCertificate(),
-				ClientCertificate: talosSecrets.ClientConfiguration.ClientCertificate(),
-				ClientKey:         talosSecrets.ClientConfiguration.ClientKey(),
+			TagSpecifications: ec2.LaunchTemplateTagSpecificationArray{
+				&ec2.LaunchTemplateTagSpecificationArgs{
+					ResourceType: pulumi.String("instance"),
+					Tags: pulumi.StringMap{
+						"Name":                             pulumi.String("control-plane-node"),
+						"kubernetes.io/cluster/kubernetes": pulumi.String("owned"),
+						"Role":                             pulumi.String("controlplane"),
+					},
+				},
 			},
-		}, pulumi.DependsOn([]pulumi.Resource{bootstrap}))
+			UserData: controlPlaneUserDataBase64,
+		})
 		if err != nil {
 			return err
 		}
-
-		// --- GENERATE TALOSCONFIG ---
-		// Generate the client talosconfig for local administration via talosctl.
-		talosconfigResult := client.GetConfigurationOutput(ctx, client.GetConfigurationOutputArgs{
-			ClusterName: pulumi.String("kubeworld-cluster"),
-			ClientConfiguration: client.GetConfigurationClientConfigurationArgs{
-				CaCertificate:     talosSecrets.ClientConfiguration.CaCertificate(),
-				ClientCertificate: talosSecrets.ClientConfiguration.ClientCertificate(),
-				ClientKey:         talosSecrets.ClientConfiguration.ClientKey(),
-			},
-			Endpoints: pulumi.StringArray{controlPlaneEip.PublicIp},
-			Nodes:     pulumi.StringArray{pulumi.String("10.240.0.11")},
-		})
 
 		apiServerTG, err := lb.NewTargetGroup(ctx, "api-server-tg", &lb.TargetGroupArgs{
 			Port:       pulumi.Int(6443),
@@ -465,14 +404,134 @@ func main() {
 			return err
 		}
 
-		_, err = lb.NewTargetGroupAttachment(ctx, "api-server-tg-attachment", &lb.TargetGroupAttachmentArgs{
-			TargetGroupArn: apiServerTG.Arn,
-			TargetId:       controlPlane.ID(),
-			Port:           pulumi.Int(6443),
+		talosTG, err := lb.NewTargetGroup(ctx, "talos-tg", &lb.TargetGroupArgs{
+			Port:       pulumi.Int(50000),
+			Protocol:   pulumi.String("TCP"),
+			VpcId:      vpc.ID(),
+			TargetType: pulumi.String("instance"),
+			HealthCheck: &lb.TargetGroupHealthCheckArgs{
+				Protocol:           pulumi.String("TCP"),
+				Port:               pulumi.String("50000"),
+				Interval:           pulumi.Int(30),
+				HealthyThreshold:   pulumi.Int(3),
+				UnhealthyThreshold: pulumi.Int(3),
+			},
 		})
 		if err != nil {
 			return err
 		}
+
+		controlPlaneAsg, err := autoscaling.NewGroup(ctx, "control-plane-asg", &autoscaling.GroupArgs{
+			VpcZoneIdentifiers: pulumi.StringArray{
+				subnet.ID(),
+			},
+			LaunchTemplate: &autoscaling.GroupLaunchTemplateArgs{
+				Id:      controlPlaneLaunchTemplate.ID(),
+				Version: pulumi.String("$Latest"),
+			},
+			MinSize:         pulumi.Int(1),
+			MaxSize:         pulumi.Int(1),
+			DesiredCapacity: pulumi.Int(1),
+			TargetGroupArns: pulumi.StringArray{
+				apiServerTG.Arn,
+				talosTG.Arn,
+			},
+			InstanceRefresh: &autoscaling.GroupInstanceRefreshArgs{
+				Strategy: pulumi.String("Rolling"),
+				Preferences: &autoscaling.GroupInstanceRefreshPreferencesArgs{
+					MinHealthyPercentage: pulumi.Int(50),
+				},
+			},
+			Tags: autoscaling.GroupTagArray{
+				&autoscaling.GroupTagArgs{
+					Key:               pulumi.String("Name"),
+					Value:             pulumi.String("control-plane-node"),
+					PropagateAtLaunch: pulumi.Bool(true),
+				},
+				&autoscaling.GroupTagArgs{
+					Key:               pulumi.String("kubernetes.io/cluster/kubernetes"),
+					Value:             pulumi.String("owned"),
+					PropagateAtLaunch: pulumi.Bool(true),
+				},
+				&autoscaling.GroupTagArgs{
+					Key:               pulumi.String("Role"),
+					Value:             pulumi.String("controlplane"),
+					PropagateAtLaunch: pulumi.Bool(true),
+				},
+			},
+		})
+		if err != nil {
+			return err
+		}
+
+		// --- DYNAMIC RUNNER SECURITY GROUP RULES ---
+		runnerIP, err := getPublicIP()
+		if err != nil {
+			return fmt.Errorf("runnerIP is blank and failed to fetch from checkip.amazonaws.com: %w", err)
+		}
+
+		runnerLbRule, err := ec2.NewSecurityGroupRule(ctx, "runner-to-lb-api", &ec2.SecurityGroupRuleArgs{
+			Type:            pulumi.String("ingress"),
+			FromPort:        pulumi.Int(6443),
+			ToPort:          pulumi.Int(6443),
+			Protocol:        pulumi.String("tcp"),
+			CidrBlocks:      pulumi.StringArray{pulumi.String(runnerIP)},
+			SecurityGroupId: apiServerLBSG.ID(),
+		})
+		if err != nil {
+			return err
+		}
+
+		runnerLbTalosRule, err := ec2.NewSecurityGroupRule(ctx, "runner-to-lb-talos", &ec2.SecurityGroupRuleArgs{
+			Type:            pulumi.String("ingress"),
+			FromPort:        pulumi.Int(50000),
+			ToPort:          pulumi.Int(50000),
+			Protocol:        pulumi.String("tcp"),
+			CidrBlocks:      pulumi.StringArray{pulumi.String(runnerIP)},
+			SecurityGroupId: apiServerLBSG.ID(),
+		})
+		if err != nil {
+			return err
+		}
+
+		var bootstrapDeps []pulumi.Resource
+		bootstrapDeps = append(bootstrapDeps, controlPlaneAsg, runnerLbRule, runnerLbTalosRule)
+
+		// --- TALOS CLUSTER BOOTSTRAP ---
+		bootstrap, err := machine.NewBootstrap(ctx, "talos-bootstrap", &machine.BootstrapArgs{
+			Node:                apiServerLB.DnsName,
+			Endpoint:            apiServerLB.DnsName,
+			ClientConfiguration: talosSecrets.ClientConfiguration.ToClientConfigurationPtrOutput(),
+		}, pulumi.DependsOn(bootstrapDeps))
+		if err != nil {
+			return err
+		}
+
+		// --- RETRIEVE KUBECONFIG ---
+		kubeconfig, err := cluster.NewKubeconfig(ctx, "talos-kubeconfig", &cluster.KubeconfigArgs{
+			Node:     apiServerLB.DnsName,
+			Endpoint: apiServerLB.DnsName,
+			ClientConfiguration: cluster.KubeconfigClientConfigurationArgs{
+				CaCertificate:     talosSecrets.ClientConfiguration.CaCertificate(),
+				ClientCertificate: talosSecrets.ClientConfiguration.ClientCertificate(),
+				ClientKey:         talosSecrets.ClientConfiguration.ClientKey(),
+			},
+		}, pulumi.DependsOn([]pulumi.Resource{bootstrap}))
+		if err != nil {
+			return err
+		}
+
+		// --- GENERATE TALOSCONFIG ---
+		talosconfigResult := client.GetConfigurationOutput(ctx, client.GetConfigurationOutputArgs{
+			ClusterName: pulumi.String("kubeworld-cluster"),
+			ClientConfiguration: client.GetConfigurationClientConfigurationArgs{
+				CaCertificate:     talosSecrets.ClientConfiguration.CaCertificate(),
+				ClientCertificate: talosSecrets.ClientConfiguration.ClientCertificate(),
+				ClientKey:         talosSecrets.ClientConfiguration.ClientKey(),
+			},
+			Endpoints: pulumi.StringArray{apiServerLB.DnsName},
+			Nodes:     pulumi.StringArray{apiServerLB.DnsName},
+		})
 
 		_, err = lb.NewListener(ctx, "api-server-listener", &lb.ListenerArgs{
 			LoadBalancerArn: apiServerLB.Arn,
@@ -482,6 +541,21 @@ func main() {
 				&lb.ListenerDefaultActionArgs{
 					Type:           pulumi.String("forward"),
 					TargetGroupArn: apiServerTG.Arn,
+				},
+			},
+		})
+		if err != nil {
+			return err
+		}
+
+		_, err = lb.NewListener(ctx, "talos-listener", &lb.ListenerArgs{
+			LoadBalancerArn: apiServerLB.Arn,
+			Port:            pulumi.Int(50000),
+			Protocol:        pulumi.String("TCP"),
+			DefaultActions: lb.ListenerDefaultActionArray{
+				&lb.ListenerDefaultActionArgs{
+					Type:           pulumi.String("forward"),
+					TargetGroupArn: talosTG.Arn,
 				},
 			},
 		})
@@ -564,7 +638,7 @@ func main() {
 		// --- EXPORTS ---
 		ctx.Export("vpcId", vpc.ID())
 		ctx.Export("subnetId", subnet.ID())
-		ctx.Export("controlPlanePublicIp", controlPlaneEip.PublicIp)
+		ctx.Export("controlPlanePublicIp", apiServerLB.DnsName)
 		ctx.Export("securityGroupId", clusterSG.ID())
 		ctx.Export("apiServerLbDns", apiServerLB.DnsName)
 		ctx.Export("apiServerLbSgId", apiServerLBSG.ID())
