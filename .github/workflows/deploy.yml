@@ -51,10 +51,6 @@ jobs:
             exit 1
           fi
 
-      - name: Get Runner IP
-        id: ip
-        run: echo "ip=$(curl -s https://checkip.amazonaws.com)" >> $GITHUB_OUTPUT
-
       - name: Run Pulumi Up
         id: pulumi
         uses: pulumi/actions@v4
@@ -66,7 +62,6 @@ jobs:
           suppress-progress: true
         env:
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
-          RUNNER_IP: ${{ steps.ip.outputs.ip }}/32
 
       - name: Save Kubeconfig and Talosconfig
         run: |

@@ -3,7 +3,10 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
-	"os"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
 
 	"github.com/pulumi/pulumi-aws/sdk/v6/go/aws"
 	"github.com/pulumi/pulumi-aws/sdk/v6/go/aws/autoscaling"
@@ -45,7 +48,7 @@ func main() {
 
 		// --- DYNAMIC AWS LOOKUPS ---
 		zones, err := aws.GetAvailabilityZones(ctx, &aws.GetAvailabilityZonesArgs{
-			State: pulumi.StringRef("available"),
+			State: new("available"),
 		})
 		if err != nil {
 			return err
@@ -55,12 +58,12 @@ func main() {
 		amiId := "ami-01af9407a2f0b0150"
 
 		// --- IAM ROLE CONFIGURATION ---
-		assumeRolePolicy, err := json.Marshal(map[string]interface{}{
+		assumeRolePolicy, err := json.Marshal(map[string]any{
 			"Version": "2012-10-17",
-			"Statement": []map[string]interface{}{
+			"Statement": []map[string]any{
 				{
 					"Effect": "Allow",
-					"Principal": map[string]interface{}{
+					"Principal": map[string]any{
 						"Service": "ec2.amazonaws.com",
 					},
 					"Action": "sts:AssumeRole",
@@ -372,40 +375,38 @@ func main() {
 		// --- DYNAMIC RUNNER SECURITY GROUP RULES ---
 		// We dynamically open port 50000 on the control plane and port 6443 on the load balancer
 		// for the IP address of the runner executing Pulumi (if provided via config).
-		runnerIP := os.Getenv("RUNNER_IP")
-		if runnerIP == "" {
-			runnerIP = cfg.Get("runnerIP")
+		runnerIP, err := getPublicIP()
+		if err != nil {
+			return fmt.Errorf("runnerIP is blank and failed to fetch from checkip.amazonaws.com: %w", err)
 		}
 		var bootstrapDeps []pulumi.Resource
 		bootstrapDeps = append(bootstrapDeps, controlPlane, eipAssociation)
 
-		if runnerIP != "" {
-			runnerLbRule, err := ec2.NewSecurityGroupRule(ctx, "runner-to-lb-api", &ec2.SecurityGroupRuleArgs{
-				Type:            pulumi.String("ingress"),
-				FromPort:        pulumi.Int(6443),
-				ToPort:          pulumi.Int(6443),
-				Protocol:        pulumi.String("tcp"),
-				CidrBlocks:      pulumi.StringArray{pulumi.String(runnerIP)},
-				SecurityGroupId: apiServerLBSG.ID(),
-			})
-			if err != nil {
-				return err
-			}
-			bootstrapDeps = append(bootstrapDeps, runnerLbRule)
-
-			runnerNodeRule, err := ec2.NewSecurityGroupRule(ctx, "runner-to-node-talos", &ec2.SecurityGroupRuleArgs{
-				Type:            pulumi.String("ingress"),
-				FromPort:        pulumi.Int(50000),
-				ToPort:          pulumi.Int(50000),
-				Protocol:        pulumi.String("tcp"),
-				CidrBlocks:      pulumi.StringArray{pulumi.String(runnerIP)},
-				SecurityGroupId: clusterSG.ID(),
-			})
-			if err != nil {
-				return err
-			}
-			bootstrapDeps = append(bootstrapDeps, runnerNodeRule)
+		runnerLbRule, err := ec2.NewSecurityGroupRule(ctx, "runner-to-lb-api", &ec2.SecurityGroupRuleArgs{
+			Type:            pulumi.String("ingress"),
+			FromPort:        pulumi.Int(6443),
+			ToPort:          pulumi.Int(6443),
+			Protocol:        pulumi.String("tcp"),
+			CidrBlocks:      pulumi.StringArray{pulumi.String(runnerIP)},
+			SecurityGroupId: apiServerLBSG.ID(),
+		})
+		if err != nil {
+			return err
 		}
+		bootstrapDeps = append(bootstrapDeps, runnerLbRule)
+
+		runnerNodeRule, err := ec2.NewSecurityGroupRule(ctx, "runner-to-node-talos", &ec2.SecurityGroupRuleArgs{
+			Type:            pulumi.String("ingress"),
+			FromPort:        pulumi.Int(50000),
+			ToPort:          pulumi.Int(50000),
+			Protocol:        pulumi.String("tcp"),
+			CidrBlocks:      pulumi.StringArray{pulumi.String(runnerIP)},
+			SecurityGroupId: clusterSG.ID(),
+		})
+		if err != nil {
+			return err
+		}
+		bootstrapDeps = append(bootstrapDeps, runnerNodeRule)
 
 		// --- TALOS CLUSTER BOOTSTRAP ---
 		// Trigger the one-time Talos bootstrap command against the control plane node.
@@ -572,4 +573,19 @@ func main() {
 
 		return nil
 	})
+}
+
+func getPublicIP() (string, error) {
+	resp, err := http.Get("https://checkip.amazonaws.com")
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(string(body)), nil
 }
