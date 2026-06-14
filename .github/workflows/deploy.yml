@@ -147,15 +147,28 @@ jobs:
             echo "Detected Endpoint: $ENDPOINT"
             echo "Detected Node IP: $NODE_IP"
             if [ -n "$NODE_IP" ] && [ -n "$ENDPOINT" ]; then
-              talosctl service -n "$NODE_IP" -e "$ENDPOINT" --insecure || true
-              talosctl containers -n "$NODE_IP" -e "$ENDPOINT" --insecure || true
-              talosctl dmesg -n "$NODE_IP" -e "$ENDPOINT" --insecure | tail -n 100 || true
+              # Try to map internal node hostname to the Load Balancer IP to satisfy TLS validation
+              LB_IP=$(getent hosts "$ENDPOINT" | awk '{print $1; exit}')
+              echo "Resolved Load Balancer IP: $LB_IP"
+              if [ -n "$LB_IP" ]; then
+                echo "$LB_IP ip-10-240-0-11" | sudo tee -a /etc/hosts
+                echo "Mapped ip-10-240-0-11 to $LB_IP in /etc/hosts"
+                echo "--- Running authenticated diagnostics ---"
+                talosctl --talosconfig ./talosconfig service -n ip-10-240-0-11 -e ip-10-240-0-11 || true
+                talosctl --talosconfig ./talosconfig containers -n ip-10-240-0-11 -e ip-10-240-0-11 || true
+                talosctl --talosconfig ./talosconfig dmesg -n ip-10-240-0-11 -e ip-10-240-0-11 | tail -n 100 || true
+              fi
+
+              # Fall back to insecure mode commands in case the node is still in maintenance mode
+              echo "--- Running maintenance mode diagnostics ---"
+              talosctl version -n "$NODE_IP" -e "$ENDPOINT" --insecure || true
             else
               echo "Could not detect endpoint or node IP from talosconfig"
             fi
           else
             echo "talosconfig not found"
           fi
+
 
 
 
