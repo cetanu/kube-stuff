@@ -70,3 +70,42 @@ jobs:
           pulumi stack output talosconfig --show-secrets --stack default > ./talosconfig
         env:
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.30.0'
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.15.0'
+
+      - name: Bootstrap Cilium CNI
+        run: |
+          helm repo add cilium https://helm.cilium.io/
+          helm repo update
+          helm upgrade --install cilium oci://quay.io/cilium/charts/cilium \
+            --namespace kube-system \
+            --set ipam.mode=kubernetes \
+            --set kubeProxyReplacement=true \
+            --set cgroup.autoMount.enabled=false \
+            --set cgroup.hostRoot=/sys/fs/cgroup \
+            --set securityContext.capabilities.ciliumAgent="{CHOWN,KILL,NET_ADMIN,NET_RAW,IPC_LOCK,SYS_ADMIN,SYS_RESOURCE,DAC_OVERRIDE,FOWNER,SETGID,SETUID}" \
+            --set securityContext.capabilities.cleanCiliumState="{NET_ADMIN,SYS_ADMIN,SYS_RESOURCE}" \
+            --kubeconfig ./kubeconfig
+
+      - name: Install Gateway API CRDs
+        run: |
+          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.1.0/standard-install.yaml --kubeconfig ./kubeconfig
+
+      - name: Install ArgoCD
+        run: |
+          kubectl create namespace argocd --kubeconfig ./kubeconfig || true
+          kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml --kubeconfig ./kubeconfig
+
+      - name: Deploy Bootstrapping Manifests
+        run: |
+          kubectl apply -f k8s/bootstrap/namespaces.yaml --kubeconfig ./kubeconfig
+          kubectl apply -f k8s/bootstrap/root-application.yaml --kubeconfig ./kubeconfig
+
