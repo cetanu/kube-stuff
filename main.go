@@ -345,43 +345,24 @@ func main() {
 			MachineSecrets:  talosSecrets.MachineSecrets,
 		})
 
-		controlPlaneUserDataBase64 := controlPlaneConfigResult.MachineConfiguration().ApplyT(func(s string) string {
-			return base64.StdEncoding.EncodeToString([]byte(s))
-		}).(pulumi.StringOutput)
-
 		workerUserDataBase64 := workerConfigResult.MachineConfiguration().ApplyT(func(s string) string {
 			return base64.StdEncoding.EncodeToString([]byte(s))
 		}).(pulumi.StringOutput)
 
-		// Create Control Plane Launch Template and Auto Scaling Group
-		controlPlaneLaunchTemplate, err := ec2.NewLaunchTemplate(ctx, "control-plane-launch-template", &ec2.LaunchTemplateArgs{
-			Name:         pulumi.String(ctx.Stack() + "-control-plane-launch-template"),
-			ImageId:      pulumi.String(amiId),
-			InstanceType: pulumi.String("t3.medium"),
-			IamInstanceProfile: &ec2.LaunchTemplateIamInstanceProfileArgs{
-				Arn: instanceProfile.Arn,
-			},
+		// Create Control Plane Node with UserData
+		controlPlane, err := ec2.NewInstance(ctx, "control-plane-0", &ec2.InstanceArgs{
+			Ami:                 pulumi.String(amiId),
+			InstanceType:        pulumi.String("t3.medium"),
+			IamInstanceProfile:  instanceProfile.Name,
 			VpcSecurityGroupIds: pulumi.StringArray{clusterSG.ID()},
-			BlockDeviceMappings: ec2.LaunchTemplateBlockDeviceMappingArray{
-				&ec2.LaunchTemplateBlockDeviceMappingArgs{
-					DeviceName: pulumi.String("/dev/sda1"),
-					Ebs: &ec2.LaunchTemplateBlockDeviceMappingEbsArgs{
-						VolumeSize: pulumi.Int(16),
-						VolumeType: pulumi.String("gp3"),
-					},
-				},
+			SubnetId:            subnet.ID(),
+			PrivateIp:           pulumi.String("10.240.0.11"),
+			Tags: pulumi.StringMap{
+				"Name":                             pulumi.String("control-plane-0"),
+				"kubernetes.io/cluster/kubernetes": pulumi.String("owned"),
+				"Role":                             pulumi.String("controlplane"),
 			},
-			TagSpecifications: ec2.LaunchTemplateTagSpecificationArray{
-				&ec2.LaunchTemplateTagSpecificationArgs{
-					ResourceType: pulumi.String("instance"),
-					Tags: pulumi.StringMap{
-						"Name":                             pulumi.String("control-plane-node"),
-						"kubernetes.io/cluster/kubernetes": pulumi.String("owned"),
-						"Role":                             pulumi.String("controlplane"),
-					},
-				},
-			},
-			UserData: controlPlaneUserDataBase64,
+			UserData: controlPlaneConfigResult.MachineConfiguration(),
 		})
 		if err != nil {
 			return err
@@ -423,44 +404,19 @@ func main() {
 			return err
 		}
 
-		controlPlaneAsg, err := autoscaling.NewGroup(ctx, "control-plane-asg", &autoscaling.GroupArgs{
-			VpcZoneIdentifiers: pulumi.StringArray{
-				subnet.ID(),
-			},
-			LaunchTemplate: &autoscaling.GroupLaunchTemplateArgs{
-				Id:      controlPlaneLaunchTemplate.ID(),
-				Version: pulumi.String("$Latest"),
-			},
-			MinSize:         pulumi.Int(1),
-			MaxSize:         pulumi.Int(1),
-			DesiredCapacity: pulumi.Int(1),
-			TargetGroupArns: pulumi.StringArray{
-				apiServerTG.Arn,
-				talosTG.Arn,
-			},
-			InstanceRefresh: &autoscaling.GroupInstanceRefreshArgs{
-				Strategy: pulumi.String("Rolling"),
-				Preferences: &autoscaling.GroupInstanceRefreshPreferencesArgs{
-					MinHealthyPercentage: pulumi.Int(50),
-				},
-			},
-			Tags: autoscaling.GroupTagArray{
-				&autoscaling.GroupTagArgs{
-					Key:               pulumi.String("Name"),
-					Value:             pulumi.String("control-plane-node"),
-					PropagateAtLaunch: pulumi.Bool(true),
-				},
-				&autoscaling.GroupTagArgs{
-					Key:               pulumi.String("kubernetes.io/cluster/kubernetes"),
-					Value:             pulumi.String("owned"),
-					PropagateAtLaunch: pulumi.Bool(true),
-				},
-				&autoscaling.GroupTagArgs{
-					Key:               pulumi.String("Role"),
-					Value:             pulumi.String("controlplane"),
-					PropagateAtLaunch: pulumi.Bool(true),
-				},
-			},
+		_, err = lb.NewTargetGroupAttachment(ctx, "api-server-tg-attachment", &lb.TargetGroupAttachmentArgs{
+			TargetGroupArn: apiServerTG.Arn,
+			TargetId:       controlPlane.ID(),
+			Port:           pulumi.Int(6443),
+		})
+		if err != nil {
+			return err
+		}
+
+		_, err = lb.NewTargetGroupAttachment(ctx, "talos-tg-attachment", &lb.TargetGroupAttachmentArgs{
+			TargetGroupArn: talosTG.Arn,
+			TargetId:       controlPlane.ID(),
+			Port:           pulumi.Int(50000),
 		})
 		if err != nil {
 			return err
@@ -497,28 +453,28 @@ func main() {
 		}
 
 		var bootstrapDeps []pulumi.Resource
-		bootstrapDeps = append(bootstrapDeps, controlPlaneAsg, runnerLbRule, runnerLbTalosRule)
+		bootstrapDeps = append(bootstrapDeps, controlPlane, runnerLbRule, runnerLbTalosRule)
 
 		// --- TALOS CLUSTER BOOTSTRAP ---
 		bootstrap, err := machine.NewBootstrap(ctx, "talos-bootstrap", &machine.BootstrapArgs{
-			Node:                apiServerLB.DnsName,
+			Node:                pulumi.String("10.240.0.11"),
 			Endpoint:            apiServerLB.DnsName,
 			ClientConfiguration: talosSecrets.ClientConfiguration.ToClientConfigurationPtrOutput(),
-		}, pulumi.DependsOn(bootstrapDeps), pulumi.ReplaceWith([]pulumi.Resource{controlPlaneAsg}))
+		}, pulumi.DependsOn(bootstrapDeps), pulumi.ReplaceWith([]pulumi.Resource{controlPlane}))
 		if err != nil {
 			return err
 		}
 
 		// --- RETRIEVE KUBECONFIG ---
 		kubeconfig, err := cluster.NewKubeconfig(ctx, "talos-kubeconfig", &cluster.KubeconfigArgs{
-			Node:     apiServerLB.DnsName,
+			Node:     pulumi.String("10.240.0.11"),
 			Endpoint: apiServerLB.DnsName,
 			ClientConfiguration: cluster.KubeconfigClientConfigurationArgs{
 				CaCertificate:     talosSecrets.ClientConfiguration.CaCertificate(),
 				ClientCertificate: talosSecrets.ClientConfiguration.ClientCertificate(),
 				ClientKey:         talosSecrets.ClientConfiguration.ClientKey(),
 			},
-		}, pulumi.DependsOn([]pulumi.Resource{bootstrap}), pulumi.ReplaceWith([]pulumi.Resource{controlPlaneAsg}))
+		}, pulumi.DependsOn([]pulumi.Resource{bootstrap}), pulumi.ReplaceWith([]pulumi.Resource{controlPlane}))
 		if err != nil {
 			return err
 		}
@@ -532,7 +488,7 @@ func main() {
 				ClientKey:         talosSecrets.ClientConfiguration.ClientKey(),
 			},
 			Endpoints: pulumi.StringArray{apiServerLB.DnsName},
-			Nodes:     pulumi.StringArray{apiServerLB.DnsName},
+			Nodes:     pulumi.StringArray{pulumi.String("10.240.0.11")},
 		})
 
 		_, err = lb.NewListener(ctx, "api-server-listener", &lb.ListenerArgs{
