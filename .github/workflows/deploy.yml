@@ -65,7 +65,8 @@ jobs:
 
       - name: Save Kubeconfig and Talosconfig
         run: |
-          pulumi stack output kubeconfig --show-secrets --stack default --cloud-url ${{ secrets.PULUMI_BACKEND_URL }} > ./kubeconfig
-          pulumi stack output talosconfig --show-secrets --stack default --cloud-url ${{ secrets.PULUMI_BACKEND_URL }} > ./talosconfig
+          pulumi login ${{ secrets.PULUMI_BACKEND_URL }}
+          pulumi stack output kubeconfig --show-secrets --stack default > ./kubeconfig
+          pulumi stack output talosconfig --show-secrets --stack default > ./talosconfig
         env:
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
