@@ -68,8 +68,10 @@ jobs:
           pulumi login ${{ secrets.PULUMI_BACKEND_URL }}
           pulumi stack output kubeconfig --show-secrets --stack default > ./kubeconfig
           pulumi stack output talosconfig --show-secrets --stack default > ./talosconfig
+          chmod 600 ./kubeconfig ./talosconfig
         env:
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+
 
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
