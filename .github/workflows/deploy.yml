@@ -83,6 +83,20 @@ jobs:
         with:
           version: 'v3.15.0'
 
+      - name: Wait for Kubernetes API Server to be ready
+        run: |
+          echo "Waiting for Kubernetes API server '/readyz' endpoint..."
+          for i in {1..30}; do
+            if kubectl --kubeconfig ./kubeconfig --request-timeout=5s get --raw='/readyz' &>/dev/null; then
+              echo "Kubernetes API server is ready!"
+              exit 0
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 10
+          done
+          echo "Timeout waiting for Kubernetes API server"
+          exit 1
+
       - name: Bootstrap Cilium CNI
         run: |
           helm repo add cilium https://helm.cilium.io/
@@ -116,8 +130,8 @@ jobs:
         run: |
           echo "=== 1. Kubernetes API & Pod Status ==="
           if [ -f ./kubeconfig ]; then
-            kubectl get nodes -o wide --kubeconfig ./kubeconfig || true
-            kubectl get pods -A -o wide --kubeconfig ./kubeconfig || true
+            kubectl get nodes -o wide --kubeconfig ./kubeconfig --request-timeout=5s || true
+            kubectl get pods -A -o wide --kubeconfig ./kubeconfig --request-timeout=5s || true
           else
             echo "kubeconfig not found"
           fi
@@ -128,17 +142,21 @@ jobs:
 
           echo "=== 3. Talos Node Status ==="
           if [ -f ./talosconfig ]; then
-            NODE_IP=$(grep -A 2 'nodes:' ./talosconfig | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
-            echo "Detected Talos Node IP: $NODE_IP"
-            if [ -n "$NODE_IP" ]; then
-              talosctl --talosconfig ./talosconfig service -n "$NODE_IP" || true
-              talosctl --talosconfig ./talosconfig containers -n "$NODE_IP" || true
-              talosctl --talosconfig ./talosconfig dmesg -n "$NODE_IP" --tail 100 || true
+            ENDPOINT=$(grep -A 1 'endpoints:' ./talosconfig | tail -n 1 | awk '{print $2}')
+            NODE_IP=$(grep -A 1 'nodes:' ./talosconfig | tail -n 1 | awk '{print $2}')
+            echo "Detected Endpoint: $ENDPOINT"
+            echo "Detected Node IP: $NODE_IP"
+            if [ -n "$NODE_IP" ] && [ -n "$ENDPOINT" ]; then
+              talosctl service -n "$NODE_IP" -e "$ENDPOINT" --insecure || true
+              talosctl containers -n "$NODE_IP" -e "$ENDPOINT" --insecure || true
+              talosctl dmesg -n "$NODE_IP" -e "$ENDPOINT" --insecure | tail -n 100 || true
             else
-              echo "Could not detect node IP from talosconfig"
+              echo "Could not detect endpoint or node IP from talosconfig"
             fi
           else
             echo "talosconfig not found"
           fi
+
+
 
 
