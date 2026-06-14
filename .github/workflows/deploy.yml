@@ -111,3 +111,34 @@ jobs:
           kubectl apply -f k8s/bootstrap/namespaces.yaml --kubeconfig ./kubeconfig
           kubectl apply -f k8s/bootstrap/root-application.yaml --kubeconfig ./kubeconfig
 
+      - name: Dump Debug Logs on Failure
+        if: failure()
+        run: |
+          echo "=== 1. Kubernetes API & Pod Status ==="
+          if [ -f ./kubeconfig ]; then
+            kubectl get nodes -o wide --kubeconfig ./kubeconfig || true
+            kubectl get pods -A -o wide --kubeconfig ./kubeconfig || true
+          else
+            echo "kubeconfig not found"
+          fi
+
+          echo "=== 2. Downloading talosctl ==="
+          sudo curl -sL https://github.com/siderolabs/talos/releases/latest/download/talosctl-linux-amd64 -o /usr/local/bin/talosctl
+          sudo chmod +x /usr/local/bin/talosctl
+
+          echo "=== 3. Talos Node Status ==="
+          if [ -f ./talosconfig ]; then
+            NODE_IP=$(grep -A 2 'nodes:' ./talosconfig | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+            echo "Detected Talos Node IP: $NODE_IP"
+            if [ -n "$NODE_IP" ]; then
+              talosctl --talosconfig ./talosconfig service -n "$NODE_IP" || true
+              talosctl --talosconfig ./talosconfig containers -n "$NODE_IP" || true
+              talosctl --talosconfig ./talosconfig dmesg -n "$NODE_IP" --tail 100 || true
+            else
+              echo "Could not detect node IP from talosconfig"
+            fi
+          else
+            echo "talosconfig not found"
+          fi
+
+
