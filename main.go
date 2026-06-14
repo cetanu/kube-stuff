@@ -399,6 +399,7 @@ func main() {
 				HealthyThreshold:   pulumi.Int(3),
 				UnhealthyThreshold: pulumi.Int(3),
 			},
+			PreserveClientIp: pulumi.String("false"),
 		})
 		if err != nil {
 			return err
@@ -416,6 +417,7 @@ func main() {
 				HealthyThreshold:   pulumi.Int(3),
 				UnhealthyThreshold: pulumi.Int(3),
 			},
+			PreserveClientIp: pulumi.String("false"),
 		})
 		if err != nil {
 			return err
@@ -502,7 +504,7 @@ func main() {
 			Node:                apiServerLB.DnsName,
 			Endpoint:            apiServerLB.DnsName,
 			ClientConfiguration: talosSecrets.ClientConfiguration.ToClientConfigurationPtrOutput(),
-		}, pulumi.DependsOn(bootstrapDeps))
+		}, pulumi.DependsOn(bootstrapDeps), pulumi.ReplaceWith([]pulumi.Resource{controlPlaneAsg}))
 		if err != nil {
 			return err
 		}
@@ -516,7 +518,7 @@ func main() {
 				ClientCertificate: talosSecrets.ClientConfiguration.ClientCertificate(),
 				ClientKey:         talosSecrets.ClientConfiguration.ClientKey(),
 			},
-		}, pulumi.DependsOn([]pulumi.Resource{bootstrap}))
+		}, pulumi.DependsOn([]pulumi.Resource{bootstrap}), pulumi.ReplaceWith([]pulumi.Resource{controlPlaneAsg}))
 		if err != nil {
 			return err
 		}
