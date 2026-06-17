@@ -472,8 +472,7 @@ func main() {
 		}
 
 		var bootstrapDeps []pulumi.Resource
-		bootstrapDeps = append(bootstrapDeps, controlPlane, runnerLbRule, runnerLbTalosRule, vpcLbRule, vpcLbTalosRule, userLbRule, userLbTalosRule)
-
+		bootstrapDeps = append(bootstrapDeps, controlPlane, runnerLbRule, runnerLbTalosRule, vpcLbRule, vpcLbTalosRule)
 
 		// --- TALOS CLUSTER BOOTSTRAP ---
 		bootstrap, err := machine.NewBootstrap(ctx, "talos-bootstrap", &machine.BootstrapArgs{
