@@ -31,11 +31,6 @@ func main() {
 			keyPairName = "kubeworld-except-it-works-this-time"
 		}
 
-		yourIP := cfg.Get("yourIP")
-		if yourIP == "" {
-			yourIP = "0.0.0.0/0"
-		}
-
 		podCidr := cfg.Get("podCidr")
 		if podCidr == "" {
 			podCidr = "10.244.0.0/16"
@@ -470,34 +465,6 @@ func main() {
 			ToPort:          pulumi.Int(50000),
 			Protocol:        pulumi.String("tcp"),
 			CidrBlocks:      pulumi.StringArray{pulumi.String("10.240.0.0/16")},
-			SecurityGroupId: apiServerLBSG.ID(),
-		})
-		if err != nil {
-			return err
-		}
-
-		if !strings.Contains(yourIP, "/") {
-			yourIP = yourIP + "/32"
-		}
-
-		userLbRule, err := ec2.NewSecurityGroupRule(ctx, "user-to-lb-api", &ec2.SecurityGroupRuleArgs{
-			Type:            pulumi.String("ingress"),
-			FromPort:        pulumi.Int(6443),
-			ToPort:          pulumi.Int(6443),
-			Protocol:        pulumi.String("tcp"),
-			CidrBlocks:      pulumi.StringArray{pulumi.String(yourIP)},
-			SecurityGroupId: apiServerLBSG.ID(),
-		})
-		if err != nil {
-			return err
-		}
-
-		userLbTalosRule, err := ec2.NewSecurityGroupRule(ctx, "user-to-lb-talos", &ec2.SecurityGroupRuleArgs{
-			Type:            pulumi.String("ingress"),
-			FromPort:        pulumi.Int(50000),
-			ToPort:          pulumi.Int(50000),
-			Protocol:        pulumi.String("tcp"),
-			CidrBlocks:      pulumi.StringArray{pulumi.String(yourIP)},
 			SecurityGroupId: apiServerLBSG.ID(),
 		})
 		if err != nil {
