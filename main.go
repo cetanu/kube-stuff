@@ -376,6 +376,9 @@ cluster:
 				"Role":                             pulumi.String("controlplane"),
 			},
 			UserData: controlPlaneConfigResult.MachineConfiguration(),
+			MetadataOptions: &ec2.InstanceMetadataOptionsArgs{
+				HttpPutResponseHopLimit: pulumi.Int(2),
+			},
 		})
 		if err != nil {
 			return err
@@ -586,6 +589,9 @@ cluster:
 				},
 			},
 			UserData: workerUserDataBase64,
+			MetadataOptions: &ec2.LaunchTemplateMetadataOptionsArgs{
+				HttpPutResponseHopLimit: pulumi.Int(2),
+			},
 		}, pulumi.DependsOn([]pulumi.Resource{bootstrap}))
 		if err != nil {
 			return err
