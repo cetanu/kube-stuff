@@ -72,6 +72,15 @@ jobs:
         env:
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
 
+      - name: Upload Kubeconfig and Talosconfig
+        uses: actions/upload-artifact@v4
+        with:
+          name: kubeconfig-talosconfig
+          path: |
+            ./kubeconfig
+            ./talosconfig
+          retention-days: 5
+
 
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
@@ -124,6 +133,37 @@ jobs:
         run: |
           kubectl apply -f k8s/bootstrap/namespaces.yaml --kubeconfig ./kubeconfig
           kubectl apply -f k8s/bootstrap/root-application.yaml --kubeconfig ./kubeconfig
+
+      - name: List Pods and Check for Failures
+        run: |
+          echo "Waiting 30 seconds for resources to begin reconciling..."
+          sleep 30
+          echo "=== 1. Kubernetes API & Pod Status ==="
+          kubectl get nodes -o wide --kubeconfig ./kubeconfig || true
+          kubectl get pods -A -o wide --kubeconfig ./kubeconfig || true
+          
+          echo "=== 2. Checking for Unhealthy Pods ==="
+          # Filter for pods NOT in Running, Succeeded, Completed, or ContainerCreating status
+          BAD_PODS=$(kubectl get pods -A --kubeconfig ./kubeconfig -o jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{" "}{.status.phase}{"\n"}{end}' | grep -vE 'Running|Succeeded|Completed|ContainerCreating' || true)
+          
+          if [ -n "$BAD_PODS" ]; then
+            echo "Found pods in an unhealthy state:"
+            echo "$BAD_PODS"
+            echo "=== Dumping Logs/Details for Unhealthy Pods ==="
+            while read -r ns name phase; do
+              if [ -n "$name" ]; then
+                echo "--------------------------------------------------"
+                echo "Pod: $ns/$name (Phase: $phase)"
+                echo "--------------------------------------------------"
+                echo ">> Describe Pod:"
+                kubectl describe pod "$name" -n "$ns" --kubeconfig ./kubeconfig || true
+                echo ">> Container Logs (last 100 lines):"
+                kubectl logs "$name" -n "$ns" --all-containers --tail=100 --kubeconfig ./kubeconfig || true
+              fi
+            done <<< "$BAD_PODS"
+          else
+            echo "No unhealthy pods detected."
+          fi
 
       - name: Dump Debug Logs on Failure
         if: failure()
