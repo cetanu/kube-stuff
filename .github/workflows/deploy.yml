@@ -143,17 +143,36 @@ jobs:
           kubectl get pods -A -o wide --kubeconfig ./kubeconfig || true
           
           echo "=== 2. Checking for Unhealthy Pods ==="
-          # Filter for pods NOT in Running, Succeeded, Completed, or ContainerCreating status
-          BAD_PODS=$(kubectl get pods -A --kubeconfig ./kubeconfig -o jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{" "}{.status.phase}{"\n"}{end}' | grep -vE 'Running|Succeeded|Completed|ContainerCreating' || true)
+          # Read raw pods list and parse readiness / status
+          BAD_PODS=$(kubectl get pods -A --kubeconfig ./kubeconfig --no-headers | while read -r ns name ready status rest; do
+            if [[ "$ready" =~ ^([0-9]+)/([0-9]+)$ ]]; then
+              current="${BASH_REMATCH[1]}"
+              total="${BASH_REMATCH[2]}"
+            else
+              current=0
+              total=0
+            fi
+            
+            unhealthy=false
+            if [[ "$status" != "Running" && "$status" != "Completed" && "$status" != "Succeeded" && "$status" != "ContainerCreating" && "$status" != "PodInitializing" ]]; then
+              unhealthy=true
+            elif [[ "$status" == "Running" && "$current" -ne "$total" ]]; then
+              unhealthy=true
+            fi
+            
+            if [ "$unhealthy" = true ]; then
+              echo "$ns $name $ready $status"
+            fi
+          done)
           
           if [ -n "$BAD_PODS" ]; then
             echo "Found pods in an unhealthy state:"
             echo "$BAD_PODS"
             echo "=== Dumping Logs/Details for Unhealthy Pods ==="
-            while read -r ns name phase; do
+            while read -r ns name ready status; do
               if [ -n "$name" ]; then
                 echo "--------------------------------------------------"
-                echo "Pod: $ns/$name (Phase: $phase)"
+                echo "Pod: $ns/$name (Ready: $ready, Status: $status)"
                 echo "--------------------------------------------------"
                 echo ">> Describe Pod:"
                 kubectl describe pod "$name" -n "$ns" --kubeconfig ./kubeconfig || true
