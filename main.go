@@ -330,6 +330,14 @@ func main() {
 				apiServerLB.DnsName.ApplyT(func(dns string) string {
 					return fmt.Sprintf("machine:\n  certSANs:\n    - %s\n", dns)
 				}).(pulumi.StringOutput),
+				pulumi.String(`
+cluster:
+  network:
+    cni:
+      name: none
+  externalCloudProvider:
+    enabled: true
+`),
 			},
 		})
 
@@ -338,6 +346,16 @@ func main() {
 			ClusterEndpoint: pulumi.Sprintf("https://%s:6443", apiServerLB.DnsName),
 			MachineType:     pulumi.String("worker"),
 			MachineSecrets:  talosSecrets.MachineSecrets,
+			ConfigPatches: pulumi.StringArray{
+				pulumi.String(`
+cluster:
+  network:
+    cni:
+      name: none
+  externalCloudProvider:
+    enabled: true
+`),
+			},
 		})
 
 		workerUserDataBase64 := workerConfigResult.MachineConfiguration().ApplyT(func(s string) string {
