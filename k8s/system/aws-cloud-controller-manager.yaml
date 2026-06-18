@@ -13,7 +13,7 @@ spec:
     targetRevision: 0.0.11
     helm:
       values: |
-        hostNetwork: true
+        hostNetworking: true
         args:
           - "--v=2"
           - "--cloud-provider=aws"
