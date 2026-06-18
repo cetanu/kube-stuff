@@ -124,12 +124,16 @@ jobs:
 
       - name: Install Gateway API CRDs
         run: |
-          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.1.0/standard-install.yaml --kubeconfig ./kubeconfig --server-side --force-conflicts
+          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.1.0/experimental-install.yaml --kubeconfig ./kubeconfig --server-side --force-conflicts
 
       - name: Install ArgoCD
         run: |
           kubectl create namespace argocd --kubeconfig ./kubeconfig || true
           kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml --kubeconfig ./kubeconfig --server-side --force-conflicts
+
+      - name: Temporarily Untaint Nodes for Bootstrap
+        run: |
+          kubectl taint nodes --all node.cloudprovider.kubernetes.io/uninitialized:NoSchedule- --kubeconfig ./kubeconfig || true
 
       - name: Deploy Bootstrapping Manifests
         run: |
