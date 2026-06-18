@@ -337,6 +337,9 @@ cluster:
       name: none
   externalCloudProvider:
     enabled: true
+machine:
+  kubelet:
+    registerWithFQDN: true
 `),
 			},
 		})
@@ -354,6 +357,9 @@ cluster:
       name: none
   externalCloudProvider:
     enabled: true
+machine:
+  kubelet:
+    registerWithFQDN: true
 `),
 			},
 		})
