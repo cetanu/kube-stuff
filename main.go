@@ -311,6 +311,17 @@ func main() {
 			return err
 		}
 
+		// --- KUBERNETES PRIVATE API SERVER LOAD BALANCER ---
+		privateApiServerLB, err := lb.NewLoadBalancer(ctx, "private-api-server-lb", &lb.LoadBalancerArgs{
+			LoadBalancerType: pulumi.String("network"),
+			Subnets:          pulumi.StringArray{subnet.ID()},
+			SecurityGroups:   pulumi.StringArray{apiServerLBSG.ID()},
+			Internal:         pulumi.Bool(true),
+		})
+		if err != nil {
+			return err
+		}
+
 		// --- TALOS OS CONFIGURATION & SECRETS ---
 		// Generate cluster-wide secrets once and persist them securely inside Pulumi state.
 		talosSecrets, err := machine.NewSecrets(ctx, "talos-secrets", &machine.SecretsArgs{
@@ -323,12 +334,14 @@ func main() {
 		// Generate dynamic machine configurations with resolved Load Balancer DNS endpoint
 		controlPlaneConfigResult := machine.GetConfigurationOutput(ctx, machine.GetConfigurationOutputArgs{
 			ClusterName:     pulumi.String("kubeworld-cluster"),
-			ClusterEndpoint: pulumi.Sprintf("https://%s:6443", apiServerLB.DnsName),
+			ClusterEndpoint: pulumi.Sprintf("https://%s:6443", privateApiServerLB.DnsName),
 			MachineType:     pulumi.String("controlplane"),
 			MachineSecrets:  talosSecrets.MachineSecrets,
 			ConfigPatches: pulumi.StringArray{
-				apiServerLB.DnsName.ApplyT(func(dns string) string {
-					return fmt.Sprintf("machine:\n  certSANs:\n    - %s\n", dns)
+				pulumi.All(apiServerLB.DnsName, privateApiServerLB.DnsName).ApplyT(func(args []any) string {
+					pubDns := args[0].(string)
+					privDns := args[1].(string)
+					return fmt.Sprintf("machine:\n  certSANs:\n    - %s\n    - %s\n", pubDns, privDns)
 				}).(pulumi.StringOutput),
 				pulumi.String(`
 cluster:
@@ -346,7 +359,7 @@ machine:
 
 		workerConfigResult := machine.GetConfigurationOutput(ctx, machine.GetConfigurationOutputArgs{
 			ClusterName:     pulumi.String("kubeworld-cluster"),
-			ClusterEndpoint: pulumi.Sprintf("https://%s:6443", apiServerLB.DnsName),
+			ClusterEndpoint: pulumi.Sprintf("https://%s:6443", privateApiServerLB.DnsName),
 			MachineType:     pulumi.String("worker"),
 			MachineSecrets:  talosSecrets.MachineSecrets,
 			ConfigPatches: pulumi.StringArray{
@@ -408,6 +421,24 @@ machine:
 			return err
 		}
 
+		privateApiServerTG, err := lb.NewTargetGroup(ctx, "private-api-server-tg", &lb.TargetGroupArgs{
+			Port:       pulumi.Int(6443),
+			Protocol:   pulumi.String("TCP"),
+			VpcId:      vpc.ID(),
+			TargetType: pulumi.String("instance"),
+			HealthCheck: &lb.TargetGroupHealthCheckArgs{
+				Protocol:           pulumi.String("TCP"),
+				Port:               pulumi.String("6443"),
+				Interval:           pulumi.Int(30),
+				HealthyThreshold:   pulumi.Int(3),
+				UnhealthyThreshold: pulumi.Int(3),
+			},
+			PreserveClientIp: pulumi.String("false"),
+		})
+		if err != nil {
+			return err
+		}
+
 		talosTG, err := lb.NewTargetGroup(ctx, "talos-tg", &lb.TargetGroupArgs{
 			Port:       pulumi.Int(50000),
 			Protocol:   pulumi.String("TCP"),
@@ -428,6 +459,15 @@ machine:
 
 		_, err = lb.NewTargetGroupAttachment(ctx, "api-server-tg-attachment", &lb.TargetGroupAttachmentArgs{
 			TargetGroupArn: apiServerTG.Arn,
+			TargetId:       controlPlane.ID(),
+			Port:           pulumi.Int(6443),
+		})
+		if err != nil {
+			return err
+		}
+
+		_, err = lb.NewTargetGroupAttachment(ctx, "private-api-server-tg-attachment", &lb.TargetGroupAttachmentArgs{
+			TargetGroupArn: privateApiServerTG.Arn,
 			TargetId:       controlPlane.ID(),
 			Port:           pulumi.Int(6443),
 		})
@@ -567,6 +607,21 @@ machine:
 			return err
 		}
 
+		_, err = lb.NewListener(ctx, "private-api-server-listener", &lb.ListenerArgs{
+			LoadBalancerArn: privateApiServerLB.Arn,
+			Port:            pulumi.Int(6443),
+			Protocol:        pulumi.String("TCP"),
+			DefaultActions: lb.ListenerDefaultActionArray{
+				&lb.ListenerDefaultActionArgs{
+					Type:           pulumi.String("forward"),
+					TargetGroupArn: privateApiServerTG.Arn,
+				},
+			},
+		})
+		if err != nil {
+			return err
+		}
+
 		workerLaunchTemplate, err := ec2.NewLaunchTemplate(ctx, "worker-launch-template", &ec2.LaunchTemplateArgs{
 			Name:         pulumi.String(ctx.Stack() + "-worker-launch-template"),
 			ImageId:      pulumi.String(amiId),
@@ -648,6 +703,7 @@ machine:
 		ctx.Export("controlPlanePublicIp", apiServerLB.DnsName)
 		ctx.Export("securityGroupId", clusterSG.ID())
 		ctx.Export("apiServerLbDns", apiServerLB.DnsName)
+		ctx.Export("privateApiServerLbDns", privateApiServerLB.DnsName)
 		ctx.Export("apiServerLbSgId", apiServerLBSG.ID())
 		ctx.Export("kubeconfig", kubeconfig.KubeconfigRaw)
 		ctx.Export("talosconfig", talosconfigResult.TalosConfig())
