@@ -383,7 +383,7 @@ machine:
 			},
 			UserData: controlPlaneConfigResult.MachineConfiguration(),
 			MetadataOptions: &ec2.InstanceMetadataOptionsArgs{
-				HttpPutResponseHopLimit: pulumi.Int(2),
+				HttpPutResponseHopLimit: pulumi.Int(3),
 			},
 		})
 		if err != nil {
@@ -596,7 +596,7 @@ machine:
 			},
 			UserData: workerUserDataBase64,
 			MetadataOptions: &ec2.LaunchTemplateMetadataOptionsArgs{
-				HttpPutResponseHopLimit: pulumi.Int(2),
+				HttpPutResponseHopLimit: pulumi.Int(3),
 			},
 		}, pulumi.DependsOn([]pulumi.Resource{bootstrap}))
 		if err != nil {
