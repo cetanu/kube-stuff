@@ -341,7 +341,7 @@ func main() {
 				pulumi.All(apiServerLB.DnsName, privateApiServerLB.DnsName).ApplyT(func(args []any) string {
 					pubDns := args[0].(string)
 					privDns := args[1].(string)
-					return fmt.Sprintf("machine:\n  certSANs:\n    - %s\n    - %s\n", pubDns, privDns)
+					return fmt.Sprintf("machine:\n  certSANs:\n    - %s\n    - %s\ncluster:\n  apiServer:\n    certSANs:\n      - %s\n      - %s\n", pubDns, privDns, pubDns, privDns)
 				}).(pulumi.StringOutput),
 				pulumi.String(`
 cluster:
@@ -705,7 +705,16 @@ machine:
 		ctx.Export("apiServerLbDns", apiServerLB.DnsName)
 		ctx.Export("privateApiServerLbDns", privateApiServerLB.DnsName)
 		ctx.Export("apiServerLbSgId", apiServerLBSG.ID())
-		ctx.Export("kubeconfig", kubeconfig.KubeconfigRaw)
+		// Rewrite the exported kubeconfig so that external clients (like developers and the GitHub runner)
+		// connect via the public API server Load Balancer rather than the private one.
+		publicKubeconfig := pulumi.All(kubeconfig.KubeconfigRaw, apiServerLB.DnsName, privateApiServerLB.DnsName).ApplyT(func(args []any) string {
+			rawKubeconfig := args[0].(string)
+			pubDns := args[1].(string)
+			privDns := args[2].(string)
+			return strings.ReplaceAll(rawKubeconfig, privDns, pubDns)
+		}).(pulumi.StringOutput)
+
+		ctx.Export("kubeconfig", publicKubeconfig)
 		ctx.Export("talosconfig", talosconfigResult.TalosConfig())
 
 		return nil
