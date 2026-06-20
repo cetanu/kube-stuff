@@ -1,4 +1,4 @@
-name: Provision stack
+name: Create and bootstrap stack
 
 on:
   push:
@@ -15,7 +15,7 @@ env:
   AWS_ROLE_TO_ASSUME: arn:aws:iam::626210706774:role/kube-github-actions-runner
 
 jobs:
-  deploy:
+  bootstrap:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
