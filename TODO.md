@@ -26,3 +26,16 @@ If we can do it all:
 [x] Get UDP Routes to access the Valheim game server
 
 
+## Problems solved
+* Destroyed the whole stack and brought it back up
+* CCM was being provisioned by Argo, leading to some race condition where it doesn't set a provider id
+* Valheim took about 15 minutes to actually boot up
+
+
+## What's next
+
+* Look at `kubespray`
+* Cluster-API and how it fits into the picture
+* Full code review, because most of it is written by Gemini
+* Think about how to turn the big YAML mess into an actual self-service platform
+    * abstracting away all the yaml details somehow, maybe into a webapp
