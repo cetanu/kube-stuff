@@ -66,6 +66,10 @@ jobs:
           pulumi stack output kubeconfig --show-secrets --stack default > ./kubeconfig
           pulumi stack output talosconfig --show-secrets --stack default > ./talosconfig
           chmod 600 ./kubeconfig ./talosconfig
+          
+          # Encrypt files for secure artifact upload
+          gpg --symmetric --cipher-algo AES256 --batch --passphrase "$PULUMI_CONFIG_PASSPHRASE" -o ./kubeconfig.gpg ./kubeconfig
+          gpg --symmetric --cipher-algo AES256 --batch --passphrase "$PULUMI_CONFIG_PASSPHRASE" -o ./talosconfig.gpg ./talosconfig
         env:
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
 
@@ -74,8 +78,8 @@ jobs:
         with:
           name: kubeconfig-talosconfig
           path: |
-            ./kubeconfig
-            ./talosconfig
+            ./kubeconfig.gpg
+            ./talosconfig.gpg
           retention-days: 5
 
 
