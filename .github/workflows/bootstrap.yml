@@ -1,9 +1,6 @@
 name: Create and bootstrap stack
 
 on:
-  push:
-    branches:
-      - master
   workflow_dispatch:
 
 permissions:
