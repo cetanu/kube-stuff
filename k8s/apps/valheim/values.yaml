@@ -9,6 +9,12 @@ valheim-k8s:
       storageClassName: ebs-sc
       size: 10Gi
 
+  serverStorage:
+    kind: persistentVolumeClaim
+    pvc:
+      storageClassName: ebs-sc
+      size: 5Gi
+
   networking:
     serviceType: ClusterIP
     gamePort: 2456

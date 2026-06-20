@@ -139,7 +139,7 @@ func main() {
 			EnableDnsHostnames: pulumi.Bool(true),
 			Tags: pulumi.StringMap{
 				"Name":                             pulumi.String("k8s-modern-vpc"),
-				"kubernetes.io/cluster/kubernetes": pulumi.String("owned"),
+				"kubernetes.io/cluster/kubeworld-cluster": pulumi.String("owned"),
 			},
 		})
 		if err != nil {
@@ -160,7 +160,7 @@ func main() {
 			AvailabilityZone:    pulumi.String(zones.Names[0]),
 			Tags: pulumi.StringMap{
 				"Name":                             pulumi.String("k8s-modern-subnet"),
-				"kubernetes.io/cluster/kubernetes": pulumi.String("owned"),
+				"kubernetes.io/cluster/kubeworld-cluster": pulumi.String("owned"),
 				"kubernetes.io/role/elb":           pulumi.String("1"),
 			},
 		})
@@ -391,7 +391,7 @@ machine:
 			PrivateIp:           pulumi.String("10.240.0.11"),
 			Tags: pulumi.StringMap{
 				"Name":                             pulumi.String("control-plane-0"),
-				"kubernetes.io/cluster/kubernetes": pulumi.String("owned"),
+				"kubernetes.io/cluster/kubeworld-cluster": pulumi.String("owned"),
 				"Role":                             pulumi.String("controlplane"),
 			},
 			UserData: controlPlaneConfigResult.MachineConfiguration(),
@@ -644,7 +644,7 @@ machine:
 					ResourceType: pulumi.String("instance"),
 					Tags: pulumi.StringMap{
 						"Name":                             pulumi.String("worker-node"),
-						"kubernetes.io/cluster/kubernetes": pulumi.String("owned"),
+						"kubernetes.io/cluster/kubeworld-cluster": pulumi.String("owned"),
 						"Role":                             pulumi.String("worker"),
 					},
 				},
@@ -682,7 +682,7 @@ machine:
 					PropagateAtLaunch: pulumi.Bool(true),
 				},
 				&autoscaling.GroupTagArgs{
-					Key:               pulumi.String("kubernetes.io/cluster/kubernetes"),
+					Key:               pulumi.String("kubernetes.io/cluster/kubeworld-cluster"),
 					Value:             pulumi.String("owned"),
 					PropagateAtLaunch: pulumi.Bool(true),
 				},
