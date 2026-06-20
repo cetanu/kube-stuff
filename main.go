@@ -14,6 +14,7 @@ import (
 	"github.com/pulumi/pulumi-aws/sdk/v6/go/aws/iam"
 	"github.com/pulumi/pulumi-aws/sdk/v6/go/aws/lb"
 	"github.com/pulumi/pulumi-aws/sdk/v6/go/aws/ssm"
+	"github.com/pulumi/pulumi-command/sdk/go/command/local"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
 	"github.com/pulumiverse/pulumi-talos/sdk/go/talos/client"
@@ -713,6 +714,34 @@ machine:
 			privDns := args[2].(string)
 			return strings.ReplaceAll(rawKubeconfig, privDns, pubDns)
 		}).(pulumi.StringOutput)
+
+		// --- CLEANUP HOOK ---
+		_, err = local.NewCommand(ctx, "k8s-cleanup-hook", &local.CommandArgs{
+			Create: pulumi.String("echo 'Cleanup hook created'"),
+			Delete: pulumi.String(`
+echo "$KUBECONFIG_CONTENT" > /tmp/kubeconfig-destroy.yaml
+export KUBECONFIG=/tmp/kubeconfig-destroy.yaml
+
+echo "Instructing Kubernetes to delete all LoadBalancer services..."
+kubectl get svc -A -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.namespace} {" "}{.metadata.name}{"\n"}{end}' | while read -r ns name; do
+    if [ ! -z "$ns" ]; then
+        echo "Deleting Service $name in namespace $ns..."
+        kubectl delete svc "$name" -n "$ns" --wait=true || true
+    fi
+done
+
+echo "Cleaning up Persistent Volume Claims..."
+kubectl delete pvc --all -A --wait=true || true
+
+rm -f /tmp/kubeconfig-destroy.yaml
+			`),
+			Environment: pulumi.StringMap{
+				"KUBECONFIG_CONTENT": publicKubeconfig,
+			},
+		}, pulumi.DependsOn([]pulumi.Resource{bootstrap, workerLaunchTemplate, apiServerLB}))
+		if err != nil {
+			return err
+		}
 
 		ctx.Export("kubeconfig", publicKubeconfig)
 		ctx.Export("talosconfig", talosconfigResult.TalosConfig())
