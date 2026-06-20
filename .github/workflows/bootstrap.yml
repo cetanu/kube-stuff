@@ -123,6 +123,17 @@ jobs:
             --set securityContext.capabilities.cleanCiliumState="{NET_ADMIN,SYS_ADMIN,SYS_RESOURCE}" \
             --kubeconfig ./kubeconfig
 
+      - name: Bootstrap AWS Cloud Controller Manager
+        run: |
+          helm repo add aws-cloud-controller-manager https://kubernetes.github.io/cloud-provider-aws
+          helm repo update
+          helm upgrade --install aws-cloud-controller-manager aws-cloud-controller-manager/aws-cloud-controller-manager \
+            --version 0.0.11 \
+            --namespace kube-system \
+            --set hostNetworking=true \
+            --set-json 'args=["--v=2", "--cloud-provider=aws", "--cluster-name=kubeworld-cluster", "--allocate-node-cidrs=true", "--cluster-cidr=10.244.0.0/16", "--configure-cloud-routes=false"]' \
+            --kubeconfig ./kubeconfig
+
       - name: Install Gateway API CRDs
         run: |
           kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.1.0/experimental-install.yaml --kubeconfig ./kubeconfig --server-side --force-conflicts
@@ -131,10 +142,6 @@ jobs:
         run: |
           kubectl create namespace argocd --kubeconfig ./kubeconfig || true
           kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml --kubeconfig ./kubeconfig --server-side --force-conflicts
-
-      - name: Temporarily Untaint Nodes for Bootstrap
-        run: |
-          kubectl taint nodes --all node.cloudprovider.kubernetes.io/uninitialized:NoSchedule- --kubeconfig ./kubeconfig || true
 
       - name: Deploy Bootstrapping Manifests
         run: |
