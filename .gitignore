@@ -3,3 +3,4 @@ kubeconfig
 talosconfig
 controlplane.yaml
 worker.yaml
+*.gpg
