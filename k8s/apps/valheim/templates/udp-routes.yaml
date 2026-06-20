@@ -1,0 +1,29 @@
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: UDPRoute
+metadata:
+  name: valheim-udp-route-2456
+  namespace: default
+spec:
+  parentRefs:
+    - name: valheim-gateway
+      namespace: default
+      sectionName: valheim-udp-2456
+  rules:
+    - backendRefs:
+        - name: valheim-server
+          port: 2456
+---
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: UDPRoute
+metadata:
+  name: valheim-udp-route-2457
+  namespace: default
+spec:
+  parentRefs:
+    - name: valheim-gateway
+      namespace: default
+      sectionName: valheim-udp-2457
+  rules:
+    - backendRefs:
+        - name: valheim-server
+          port: 2457

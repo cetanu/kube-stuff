@@ -1,0 +1,15 @@
+valheim-k8s:
+  worldName: "Wraeclast"
+  serverName: "vsy-valheim"
+  password: "SecretPassword123"
+
+  storage:
+    kind: persistentVolumeClaim
+    pvc:
+      storageClassName: ebs-sc
+      size: 10Gi
+
+  networking:
+    serviceType: ClusterIP
+    gamePort: 2456
+    publishQueryPort: true
