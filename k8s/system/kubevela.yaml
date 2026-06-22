@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kubevela
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://kubevela.github.io/charts
+    chart: vela-core
+    targetRevision: '1.9.11' # Use the latest stable version you want
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: vela-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
