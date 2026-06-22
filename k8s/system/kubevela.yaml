@@ -16,6 +16,11 @@ spec:
         admissionWebhooks:
           certManager:
             enabled: true
+        multicluster:
+          clusterGateway:
+            secureTLS:
+              certManager:
+                enabled: true
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: vela-system
