@@ -1,23 +1,16 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: kubevela
+  name: velaux
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
-    repoURL: https://kubevela.github.io/charts
-    chart: vela-core
-    targetRevision: '1.9.11'
-    helm:
-      values: |
-        admissionWebhooks:
-          certManager:
-            enabled: true
-        multicluster:
-          enabled: false
+    repoURL: 'https://github.com/cetanu/kube-stuff.git'
+    targetRevision: HEAD
+    path: k8s/infra/velaux
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: vela-system
@@ -25,5 +18,3 @@ spec:
     automated:
       prune: true
       selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
