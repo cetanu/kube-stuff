@@ -1,0 +1,61 @@
+apiVersion: core.oam.dev/v1beta1
+kind: TraitDefinition
+metadata:
+  name: http-route
+  namespace: vela-system
+  annotations:
+    definition.oam.dev/description: "Expose a component via Envoy Gateway with an HTTPRoute"
+spec:
+  appliesToWorkloads:
+    - "*"
+  schematic:
+    cue:
+      template: |
+        parameter: {
+        	// The port to listen on and route traffic to
+        	port: *80 | int
+        	// The Gateway API gateway class to use
+        	gatewayClassName: *"eg" | string
+        	// The path prefix to match
+        	pathPrefix: *"/" | string
+        }
+
+        outputs: {
+        	gateway: {
+        		apiVersion: "gateway.networking.k8s.io/v1"
+        		kind:       "Gateway"
+        		metadata: name: context.name + "-gateway"
+        		spec: {
+        			gatewayClassName: parameter.gatewayClassName
+        			listeners: [{
+        				name:     "http"
+        				protocol: "HTTP"
+        				port:     parameter.port
+        				allowedRoutes: namespaces: from: "Same"
+        			}]
+        		}
+        	}
+        	route: {
+        		apiVersion: "gateway.networking.k8s.io/v1"
+        		kind:       "HTTPRoute"
+        		metadata: name: context.name + "-route"
+        		spec: {
+        			parentRefs: [{
+        				name:      context.name + "-gateway"
+        				namespace: context.namespace
+        			}]
+        			rules: [{
+        				matches: [{
+        					path: {
+        						type:  "PathPrefix"
+        						value: parameter.pathPrefix
+        					}
+        				}]
+        				backendRefs: [{
+        					name: context.name
+        					port: parameter.port
+        				}]
+        			}]
+        		}
+        	}
+        }

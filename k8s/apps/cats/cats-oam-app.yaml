@@ -21,3 +21,6 @@ spec:
         - type: scaler
           properties:
             replicas: 2
+        - type: http-route
+          properties:
+            port: 80
