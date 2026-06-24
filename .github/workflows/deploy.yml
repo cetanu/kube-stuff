@@ -4,9 +4,8 @@ on:
   push:
     branches:
       - master
-    paths-ignore:
-      - 'k8s/**'
-      - 'todo/**'
+    paths:
+      - 'infra/**'
   workflow_dispatch:
 
 permissions:
