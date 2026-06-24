@@ -1,0 +1,73 @@
+apiVersion: core.oam.dev/v1beta1
+kind: ComponentDefinition
+metadata:
+  name: cron-job
+  namespace: vela-system
+  annotations:
+    definition.oam.dev/description: "Run a container on a recurring schedule"
+spec:
+  workload:
+    definition:
+      apiVersion: batch/v1
+      kind: CronJob
+  schematic:
+    cue:
+      template: |
+        parameter: {
+        	// Container image to run
+        	image: string
+        	// Cron schedule expression (e.g. "*/5 * * * *")
+        	schedule: string
+        	// Command to execute
+        	command?: [...string]
+        	// Arguments to the command
+        	args?: [...string]
+        	// Environment variables
+        	env?: [...{
+        		name:  string
+        		value: string
+        	}]
+        	// How to handle overlapping runs: "Forbid", "Allow", or "Replace"
+        	concurrencyPolicy: *"Forbid" | string
+        	// Number of retries before marking as failed
+        	backoffLimit: *3 | int
+        	// CPU request (e.g. "100m")
+        	cpu: *"100m" | string
+        	// Memory request (e.g. "128Mi")
+        	memory: *"128Mi" | string
+        }
+
+        output: {
+        	apiVersion: "batch/v1"
+        	kind:       "CronJob"
+        	metadata: name: context.name
+        	spec: {
+        		schedule:                   parameter.schedule
+        		concurrencyPolicy:          parameter.concurrencyPolicy
+        		successfulJobsHistoryLimit: 3
+        		failedJobsHistoryLimit:     3
+        		jobTemplate: spec: {
+        			backoffLimit: parameter.backoffLimit
+        			template: spec: {
+        				restartPolicy: "Never"
+        				containers: [{
+        					name:  context.name
+        					image: parameter.image
+        					if parameter.command != _|_ {
+        						command: parameter.command
+        					}
+        					if parameter.args != _|_ {
+        						args: parameter.args
+        					}
+        					if parameter.env != _|_ {
+        						env: parameter.env
+        					}
+        					resources: requests: {
+        						cpu:    parameter.cpu
+        						memory: parameter.memory
+        					}
+        				}]
+        			}
+        		}
+        	}
+        }

@@ -21,7 +21,7 @@ Of course, the overall goal of this implementation of kube is that the platform 
 | `webservice` | HTTP API or web frontend | KubeVela built-in (Deployment + ClusterIP) | ✅ Done |
 | `grpc-service` | gRPC backend service | Custom ComponentDefinition (Deployment + ClusterIP with gRPC ports) | Planned |
 | `worker` | Background processor (queue consumer, etc.) | KubeVela built-in (Deployment, no Service) | Built-in |
-| `cron-job` | Scheduled tasks | Custom ComponentDefinition (CronJob) | Planned |
+| `cron-job` | Scheduled tasks | Custom ComponentDefinition (CronJob) | ✅ Done |
 
 ## Data
 
