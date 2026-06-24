@@ -1,0 +1,42 @@
+apiVersion: core.oam.dev/v1beta1
+kind: ComponentDefinition
+metadata:
+  name: sql-database
+  namespace: vela-system
+  annotations:
+    definition.oam.dev/description: "Provision a PostgreSQL database via CloudNativePG"
+spec:
+  workload:
+    definition:
+      apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+  schematic:
+    cue:
+      template: |
+        parameter: {
+        	// Storage size for the database (e.g. "10Gi")
+        	storage: *"5Gi" | string
+        	// Storage class to use
+        	storageClass: *"ebs-sc" | string
+        	// Number of postgres instances (1 = standalone, 3 = HA)
+        	instances: *1 | int
+        	// Name of the database to create
+        	database: *"app" | string
+        }
+
+        output: {
+        	apiVersion: "postgresql.cnpg.io/v1"
+        	kind:       "Cluster"
+        	metadata: name: context.name
+        	spec: {
+        		instances: parameter.instances
+        		storage: {
+        			size:         parameter.storage
+        			storageClass: parameter.storageClass
+        		}
+        		bootstrap: initdb: {
+        			database: parameter.database
+        			owner:    context.name
+        		}
+        	}
+        }
