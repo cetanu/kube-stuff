@@ -1,0 +1,23 @@
+apiVersion: core.oam.dev/v1beta1
+kind: Application
+metadata:
+  name: cats-web-server
+  namespace: default
+spec:
+  components:
+    - name: cats-web-server
+      type: webservice
+      properties:
+        image: nginx:alpine
+        ports:
+          - port: 80
+            expose: true
+        volumeMounts:
+          configMap:
+            - name: html-volume
+              mountPath: /usr/share/nginx/html
+              cmName: cats-html
+      traits:
+        - type: scaler
+          properties:
+            replicas: 2

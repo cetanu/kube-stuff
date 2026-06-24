@@ -36,9 +36,9 @@ If we can do it all:
 
 ### Chunk 1: The Abstraction Layer (KubeVela Basics)
 *Goal: Stop writing raw Deployments and Services.*
-- [ ] Install the KubeVela controller on the cluster.
-- [ ] Install the `vela` CLI locally.
-- [ ] Write our first OAM `Application` manifest (deploying a simple web app) instead of raw k8s YAML.
+- [x] Install the KubeVela controller on the cluster.
+- [x] Install the `vela` CLI locally.
+- [x] Write our first OAM `Application` manifest (deploying a simple web app) instead of raw k8s YAML.
 - [ ] Integrate KubeVela into the existing ArgoCD GitOps pipeline (so ArgoCD syncs the `Application` manifest).
 
 ### Chunk 2: Magic URLs (Ingress & Routing)
