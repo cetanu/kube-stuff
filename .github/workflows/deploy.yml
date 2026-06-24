@@ -6,6 +6,7 @@ on:
       - master
     paths-ignore:
       - 'k8s/**'
+      - 'todo/**'
   workflow_dispatch:
 
 permissions:
@@ -27,6 +28,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
+          cache-dependency-path: infra/go.sum
 
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v6.2.0
@@ -61,5 +63,6 @@ jobs:
           cloud-url: ${{ secrets.PULUMI_BACKEND_URL }}
           upsert: true
           suppress-progress: true
+          work-dir: infra
         env:
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}

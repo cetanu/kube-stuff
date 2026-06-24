@@ -22,6 +22,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
+          cache-dependency-path: infra/go.sum
 
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v6.2.0
@@ -36,5 +37,6 @@ jobs:
           command: destroy
           stack-name: default
           cloud-url: ${{ secrets.PULUMI_BACKEND_URL }}
+          work-dir: infra
         env:
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
