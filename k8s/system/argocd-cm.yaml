@@ -13,10 +13,11 @@ data:
     hs.status = "Progressing"
     hs.message = ""
     if obj.status ~= nil then
-      if obj.status.phase ~= nil then
-        if obj.status.phase == "running" then
+      local status_val = obj.status.status or obj.status.phase
+      if status_val ~= nil then
+        if status_val == "running" then
           hs.status = "Healthy"
-        elseif obj.status.phase == "failed" then
+        elseif status_val == "failed" then
           hs.status = "Degraded"
           hs.message = obj.status.message or ""
         end

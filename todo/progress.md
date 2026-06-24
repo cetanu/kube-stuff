@@ -49,7 +49,7 @@ If we can do it all:
 
 ### Chunk 3: Developer UI & Self-Service
 *Goal: Provide a web dashboard so users don't even need to touch git if they don't want to.*
-- [ ] Install VelaUX (KubeVela's official web dashboard).
+- [x] Install VelaUX (KubeVela's official web dashboard).
 - [ ] Define standard "Components" (e.g., `standard-web-app`, `background-worker`) for users to choose from.
 - [ ] Configure basic RBAC so a user can log into the UI and only see/manage their own applications.
 
